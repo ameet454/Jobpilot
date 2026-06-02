@@ -1,0 +1,20 @@
+{
+  "name": "jobpilot",
+  "version": "2.0.0",
+  "description": "India's first AI job command centre — real jobs, AI-scored, tailored resume in 2 minutes",
+  "private": true,
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "dev": "vercel dev",
+    "deploy": "vercel --prod"
+  },
+  "dependencies": {
+    "@upstash/ratelimit": "^2.0.8",
+    "@upstash/redis": "^1.38.0"
+  },
+  "devDependencies": {
+    "vercel": "^37.0.0"
+  }
+}

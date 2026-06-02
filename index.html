@@ -1,0 +1,2196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>JobPilot v2 — AI Job Command Centre</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+<!-- docx.js — generates real Word .docx files (no server needed) -->
+<script src="https://unpkg.com/docx@8.5.0/build/index.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --ink:#0f1117;--ink2:#3d4048;--ink3:#7a7d88;
+  --bg:#f5f6fa;--card:#fff;--card2:#f0f1f6;
+  --br:#e2e4ec;--br2:#c8cad6;
+  --blue:#4361EE;--blue-l:#eef1fd;--blue-d:#2d4bd4;
+  --green:#059669;--green-l:#d1fae5;
+  --amber:#b45309;--amber-l:#fef3c7;
+  --red:#dc2626;--red-l:#fee2e2;
+  --purple:#7c3aed;--purple-l:#ede9fe;
+  --r:12px;--rs:8px;--shadow:0 1px 4px rgba(0,0,0,.08);
+}
+html,body{height:100%;font-family:'Inter',sans-serif;font-size:14px;color:var(--ink);background:var(--bg)}
+button,input,select,textarea{font-family:inherit}
+.pg{display:none}.pg.on{display:flex}
+.mono{font-family:'JetBrains Mono',monospace}
+
+/* ─── TOP BAR ─── */
+#topbar{position:fixed;top:0;left:0;right:0;height:52px;background:var(--card);border-bottom:1px solid var(--br);display:none;align-items:center;justify-content:space-between;padding:0 20px;z-index:100;gap:10px}
+.brand{font-size:15px;font-weight:800;color:var(--blue);font-family:'JetBrains Mono',monospace}
+.topbar-right{display:flex;align-items:center;gap:8px}
+.pill-free{font-size:11px;padding:3px 10px;border-radius:10px;background:var(--card2);color:var(--ink3);cursor:pointer;border:1px solid var(--br)}
+.icon-btn{padding:5px 12px;border-radius:var(--rs);border:1px solid var(--br);background:transparent;font-size:12px;color:var(--ink3);cursor:pointer}
+.icon-btn:hover{background:var(--card2)}
+
+/* ─── SETUP PAGE ─── */
+#pg-setup{flex-direction:column;align-items:center;justify-content:center;min-height:100vh;background:var(--bg);padding:32px 20px}
+.setup-card{background:var(--card);border:1px solid var(--br);border-radius:16px;padding:40px 44px;width:520px;max-width:95vw}
+.setup-logo{width:52px;height:52px;background:var(--blue);border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:24px;margin:0 auto 20px}
+.setup-title{font-size:22px;font-weight:800;text-align:center;margin-bottom:6px;letter-spacing:-.02em}
+.setup-sub{font-size:13px;color:var(--ink3);text-align:center;line-height:1.6;margin-bottom:28px}
+.setup-step{margin-bottom:20px;padding:16px;background:var(--bg);border:1px solid var(--br);border-radius:var(--r)}
+.setup-step-head{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.step-num{width:24px;height:24px;border-radius:50%;background:var(--blue);color:#fff;font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.step-title{font-size:13px;font-weight:700}
+.step-badge{font-size:10px;padding:2px 7px;border-radius:8px;font-weight:700}
+.badge-required{background:var(--red-l);color:var(--red)}
+.badge-optional{background:var(--green-l);color:var(--green)}
+.step-desc{font-size:11px;color:var(--ink3);line-height:1.5;margin-bottom:8px}
+.key-field{position:relative}
+.key-field input{width:100%;padding:10px 40px 10px 12px;border:1.5px solid var(--br2);border-radius:var(--rs);font-size:12px;font-family:'JetBrains Mono',monospace;color:var(--ink);background:var(--card);outline:none}
+.key-field input:focus{border-color:var(--blue)}
+.eye-btn{position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--ink3);font-size:15px}
+.get-key-link{display:inline-block;font-size:11px;color:var(--blue);font-weight:600;margin-top:6px;text-decoration:none}
+.get-key-link:hover{text-decoration:underline}
+.model-row{margin-top:10px}
+.model-row label{font-size:11px;font-weight:600;color:var(--ink3);text-transform:uppercase;letter-spacing:.04em;display:block;margin-bottom:5px}
+.model-row select{width:100%;padding:9px 11px;border:1.5px solid var(--br2);border-radius:var(--rs);font-size:12px;color:var(--ink);background:var(--card)}
+.cost-note{font-size:11px;color:var(--ink3);background:#fffbeb;border:1px solid #fcd34d;border-radius:var(--rs);padding:8px 11px;margin-top:10px;line-height:1.5}
+.setup-cta{width:100%;padding:13px;border-radius:var(--rs);border:none;background:var(--blue);color:#fff;font-size:14px;font-weight:700;cursor:pointer;margin-top:8px}
+.setup-cta:hover{background:var(--blue-d)}
+.setup-err{font-size:12px;color:var(--red);margin-top:6px;display:none}
+.setup-legal{font-size:10px;color:var(--ink3);text-align:center;margin-top:16px;line-height:1.6}
+
+/* ─── UPLOAD PAGE ─── */
+#pg-upload{flex-direction:column;align-items:center;justify-content:center;min-height:100vh;padding:70px 20px 40px;background:var(--bg)}
+.hero-badge{display:inline-flex;align-items:center;gap:6px;background:var(--blue-l);color:var(--blue);font-size:12px;font-weight:600;padding:5px 14px;border-radius:20px;margin-bottom:18px}
+.bdot{width:7px;height:7px;border-radius:50%;background:var(--blue);animation:pop 2s infinite}
+@keyframes pop{0%,100%{transform:scale(1)}50%{transform:scale(1.4);opacity:.5}}
+.hero-h{font-size:36px;font-weight:800;text-align:center;letter-spacing:-.03em;line-height:1.15;max-width:520px;margin-bottom:10px}
+.hero-h .hi{color:var(--blue)}
+.hero-p{font-size:13px;color:var(--ink3);text-align:center;max-width:400px;line-height:1.6;margin-bottom:24px}
+.drop-zone{width:480px;max-width:92vw;border:2px dashed var(--br2);border-radius:var(--r);padding:28px;text-align:center;cursor:pointer;background:var(--card);transition:all .15s;position:relative}
+.drop-zone:hover,.drop-zone.drag{border-color:var(--blue);background:var(--blue-l)}
+.drop-zone input{position:absolute;inset:0;opacity:0;cursor:pointer}
+.drop-ico{font-size:32px;margin-bottom:8px}
+.drop-t{font-size:14px;font-weight:600;margin-bottom:3px}
+.drop-s{font-size:12px;color:var(--ink3)}
+.or-sep{font-size:12px;color:var(--ink3);margin:10px 0;width:480px;max-width:92vw;text-align:center}
+.paste-area{width:480px;max-width:92vw}
+.paste-area textarea{width:100%;height:72px;padding:10px;border:1px solid var(--br2);border-radius:var(--rs);font-size:12px;resize:none;color:var(--ink);background:var(--card)}
+.paste-area textarea:focus{outline:none;border-color:var(--blue)}
+.pref-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;width:480px;max-width:92vw;margin-top:8px}
+.pref-wrap{position:relative}
+.pref-inp{width:100%;padding:9px 11px;border:1px solid var(--br2);border-radius:var(--rs);font-size:12px;color:var(--ink);background:var(--card)}
+.pref-inp:focus{outline:none;border-color:var(--blue)}
+.sug-box{position:absolute;top:100%;left:0;right:0;background:var(--card);border:1px solid var(--br2);border-radius:var(--rs);box-shadow:var(--shadow);z-index:300;max-height:150px;overflow-y:auto;display:none}
+.sug-box.on{display:block}
+.sug-item{padding:7px 11px;font-size:12px;cursor:pointer}
+.sug-item:hover{background:var(--blue-l);color:var(--blue)}
+.start-btn{margin-top:10px;padding:13px;width:480px;max-width:92vw;border-radius:var(--rs);border:none;background:var(--blue);color:#fff;font-size:14px;font-weight:700;cursor:pointer}
+.start-btn:hover{background:var(--blue-d)}
+.upload-footer{font-size:11px;color:var(--ink3);margin-top:8px}
+.resume-saved-bar{width:480px;max-width:92vw;background:var(--green-l);border:1px solid #a7f3d0;border-radius:var(--rs);padding:8px 12px;font-size:12px;color:var(--green);display:none;align-items:center;gap:8px;margin-bottom:8px}
+
+/* ─── EXTRACT PAGE ─── */
+#pg-extract{flex-direction:column;align-items:center;justify-content:center;min-height:100vh}
+.ext-card{background:var(--card);border:1px solid var(--br);border-radius:var(--r);padding:44px 52px;text-align:center;width:420px;max-width:92vw}
+.spinner{width:48px;height:48px;border:3px solid var(--blue-l);border-top-color:var(--blue);border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 18px}
+@keyframes spin{to{transform:rotate(360deg)}}
+.ext-title{font-size:19px;font-weight:800;margin-bottom:6px}
+.ext-sub{font-size:13px;color:var(--ink3)}
+.ext-steps{margin-top:20px;text-align:left;display:flex;flex-direction:column;gap:7px}
+.exs{display:flex;align-items:center;gap:9px;font-size:12px;color:var(--ink3);transition:color .2s}
+.exs.act{color:var(--blue);font-weight:600}
+.exs.done{color:var(--green)}
+.exs-dot{width:18px;height:18px;border-radius:50%;border:1.5px solid currentColor;display:flex;align-items:center;justify-content:center;font-size:10px;flex-shrink:0}
+
+/* ─── PROFILE PAGE ─── */
+#pg-profile{flex-direction:column;min-height:100vh;padding:52px 40px 40px;max-width:740px;margin:0 auto;width:100%}
+.pg-label{font-size:11px;font-weight:700;color:var(--blue);letter-spacing:.07em;text-transform:uppercase;margin-bottom:5px}
+.pg-title{font-size:24px;font-weight:800;letter-spacing:-.02em;margin-bottom:4px}
+.pg-sub{font-size:13px;color:var(--ink3);margin-bottom:20px}
+.uvp-box{background:linear-gradient(135deg,var(--blue-l),#f0f4ff);border:1px solid #b5cfe8;border-radius:var(--r);padding:14px 16px;margin-bottom:18px}
+.uvp-label{font-size:10px;font-weight:700;color:var(--blue);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px}
+.uvp-text{font-size:13px;color:var(--ink);line-height:1.5;font-style:italic}
+.pf-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:16px}
+.pf-card{background:var(--card);border:1px solid var(--br);border-radius:var(--rs);padding:11px 13px}
+.pf-label{font-size:10px;font-weight:600;color:var(--ink3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px}
+.pf-val{font-size:13px;font-weight:500;color:var(--ink)}
+.eda{border:none;background:transparent;width:100%;font-size:12px;color:var(--ink);outline:none;padding:0;resize:none;line-height:1.55}
+.chips{display:flex;flex-wrap:wrap;gap:4px;margin-top:3px}
+.chip{font-size:11px;padding:2px 9px;border-radius:14px;background:var(--blue-l);color:var(--blue);font-weight:500}
+.btn-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:4px}
+.btn-back{padding:11px 18px;border-radius:var(--rs);border:1px solid var(--br2);background:transparent;font-size:13px;cursor:pointer;color:var(--ink2)}
+.btn-scan{padding:11px 24px;border-radius:var(--rs);border:none;background:var(--blue);color:#fff;font-size:13px;font-weight:700;cursor:pointer}
+.btn-scan:hover{background:var(--blue-d)}
+
+/* ─── RESULTS PAGE ─── */
+#pg-results{flex-direction:row;height:100vh;overflow:hidden}
+.res-main{flex:1;display:flex;flex-direction:column;overflow:hidden}
+.res-bar{background:var(--card);border-bottom:1px solid var(--br);padding:10px 16px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;flex-wrap:wrap;gap:6px}
+.res-brand{font-size:14px;font-weight:800;color:var(--blue);font-family:'JetBrains Mono',monospace}
+.scan-pill{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;padding:4px 10px;border-radius:10px;background:var(--blue-l);color:var(--blue)}
+.scan-dot{width:6px;height:6px;border-radius:50%;background:var(--blue);animation:pop 1s infinite}
+.res-actions{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.res-action-btn{font-size:11px;padding:5px 10px;border-radius:var(--rs);border:1px solid var(--br2);background:var(--card);cursor:pointer;color:var(--ink2)}
+.res-action-btn:hover{background:var(--card2)}
+.res-body{flex:1;overflow-y:auto;padding:12px 14px}
+.stats-row{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-bottom:10px}
+.stat-box{background:var(--card);border:1px solid var(--br);border-radius:var(--rs);padding:8px 10px;text-align:center}
+.stat-val{font-size:18px;font-weight:800;font-family:'JetBrains Mono',monospace;line-height:1}
+.stat-lbl{font-size:10px;color:var(--ink3);margin-top:2px}
+.prog-box{background:var(--card);border:1px solid var(--br);border-radius:var(--rs);padding:9px 13px;margin-bottom:10px}
+.prog-top{display:flex;justify-content:space-between;font-size:12px;margin-bottom:5px}
+.prog-track{height:4px;background:var(--card2);border-radius:2px}
+.prog-fill{height:100%;background:var(--blue);border-radius:2px;transition:width .4s;width:0}
+.filter-row{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:4px;align-items:center}
+.fb{font-size:11px;font-weight:500;padding:4px 10px;border-radius:13px;border:1px solid var(--br);background:var(--card);color:var(--ink2);cursor:pointer}
+.fb.on{background:var(--blue-l);color:var(--blue);border-color:#b5cfe8;font-weight:600}
+.fc{font-size:11px;color:var(--ink3);margin-left:auto}
+.job-list{display:flex;flex-direction:column;gap:7px;padding-bottom:24px}
+.empty-feed{text-align:center;padding:40px 20px;color:var(--ink3)}
+
+/* ─── JOB CARD ─── */
+.jcard{background:var(--card);border:1px solid var(--br);border-radius:var(--r);padding:12px 14px;cursor:pointer;transition:border .15s}
+.jcard:hover{border-color:var(--br2)}
+.jcard.open{border:1.5px solid var(--blue)}
+.jcard-top{display:flex;gap:10px;align-items:flex-start}
+.score-badge{width:48px;height:48px;border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;flex-shrink:0}
+.score-num{font-size:16px;font-weight:800;font-family:'JetBrains Mono',monospace;line-height:1}
+.score-den{font-size:8px;font-weight:600;opacity:.7}
+.jcard-body{flex:1;min-width:0}
+.jcard-title-row{display:flex;align-items:center;flex-wrap:wrap;gap:4px;margin-bottom:2px}
+.jtitle{font-size:13px;font-weight:700}
+.bdg{font-size:9px;font-weight:800;padding:2px 6px;border-radius:7px;white-space:nowrap}
+.bdg-green{background:var(--green-l);color:var(--green)}
+.bdg-amber{background:var(--amber-l);color:var(--amber)}
+.bdg-blue{background:var(--blue-l);color:var(--blue)}
+.bdg-red{background:var(--red-l);color:var(--red)}
+.bdg-verified{background:#dcfce7;color:#15803d;border:1px solid #bbf7d0}
+.bdg-aggregated{background:#fef9c3;color:#854d0e;border:1px solid #fef08a}
+.bdg-gray{background:var(--card2);color:var(--ink2);border:1px solid var(--br)}
+.jcard-meta{font-size:11px;color:var(--ink3);display:flex;flex-wrap:wrap;gap:5px;align-items:center;margin-bottom:3px}
+.jcard-salary{font-size:11px;font-weight:700;color:var(--green)}
+.jcard-why{font-size:12px;color:var(--ink2);line-height:1.5;margin-top:3px}
+.jcard-strengths{display:flex;flex-wrap:wrap;gap:3px;margin-top:4px}
+.str-chip{font-size:10px;padding:2px 7px;border-radius:5px;background:var(--green-l);color:var(--green)}
+.jcard-actions{display:flex;flex-direction:column;gap:4px;flex-shrink:0}
+.btn-tailor{font-size:11px;font-weight:700;padding:7px 11px;border-radius:var(--rs);border:none;background:var(--blue);color:#fff;cursor:pointer;white-space:nowrap}
+.btn-tailor.locked{background:var(--purple)}
+.btn-apply{font-size:11px;padding:6px 11px;border-radius:var(--rs);border:1px solid var(--br2);background:var(--card);color:var(--ink);cursor:pointer;text-decoration:none;display:block;text-align:center;white-space:nowrap}
+.btn-track{font-size:11px;font-weight:600;padding:6px 11px;border-radius:var(--rs);border:1px solid #a7f3d0;background:var(--green-l);color:var(--green);cursor:pointer;white-space:nowrap}
+.jcard-expand{margin-top:10px;padding-top:10px;border-top:1px solid var(--br);display:none}
+.jcard-expand.on{display:block}
+.expand-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-bottom:8px}
+.exp-box{border-radius:var(--rs);padding:10px 12px}
+.exp-box-title{font-size:11px;font-weight:700;margin-bottom:4px}
+.exp-item{font-size:11px;margin:3px 0;line-height:1.4}
+.score-breakdown{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:8px}
+.sbd-pill{font-size:10px;padding:2px 8px;border-radius:8px;background:var(--card2);border:1px solid var(--br);color:var(--ink2)}
+.strategy-box{background:var(--purple-l);border-radius:var(--rs);padding:8px 11px;margin-bottom:8px}
+.strategy-title{font-size:10px;font-weight:700;color:var(--purple);margin-bottom:2px}
+.strategy-text{font-size:11px;color:var(--ink2);line-height:1.4}
+.keywords-row{margin-bottom:8px}
+.kw-label{font-size:11px;font-weight:700;color:var(--ink2);margin-bottom:3px}
+.kw-chips{display:flex;flex-wrap:wrap;gap:3px}
+.kw-chip{font-size:11px;padding:2px 7px;border-radius:5px;background:var(--blue-l);color:var(--blue);font-weight:500}
+.headline-box{background:var(--blue-l);border-radius:var(--rs);padding:8px 11px;margin-bottom:8px}
+.hl-label{font-size:10px;font-weight:700;color:var(--blue);margin-bottom:2px}
+.hl-text{font-size:12px;color:var(--blue)}
+.iqs-label{font-size:11px;font-weight:700;color:var(--ink2);margin-bottom:4px}
+.iq{font-size:11px;color:var(--ink2);padding:4px 0 4px 10px;border-left:2px solid var(--amber);margin:3px 0;line-height:1.4}
+
+/* ─── LOG PANE ─── */
+.log-pane{width:236px;border-left:1px solid var(--br);background:var(--card);display:flex;flex-direction:column;flex-shrink:0}
+.log-head{padding:9px 11px 7px;border-bottom:1px solid var(--br);display:flex;align-items:center;gap:6px}
+.log-title{font-size:12px;font-weight:700}
+.log-badge{font-size:9px;font-weight:700;padding:2px 6px;border-radius:7px}
+.lb-live{background:var(--blue);color:#fff}
+.lb-done{background:var(--green-l);color:var(--green)}
+.log-body{flex:1;overflow-y:auto;padding:4px 8px}
+.log-entry{display:flex;gap:4px;padding:3px 0;align-items:flex-start}
+.log-ico{font-size:11px;width:14px;text-align:center;flex-shrink:0}
+.log-co{font-size:10px;font-weight:700}
+.log-msg{font-size:10px;color:var(--ink3);line-height:1.3}
+
+/* ─── STUDIO PAGE ─── */
+#pg-studio{flex-direction:column;height:100vh;overflow:hidden}
+.studio-bar{background:var(--card);border-bottom:1px solid var(--br);padding:10px 18px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;flex-wrap:wrap;gap:8px}
+.studio-info{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.tab-group{display:flex;gap:2px;background:var(--card2);border-radius:8px;padding:2px}
+.stab{padding:5px 13px;border-radius:6px;border:none;background:transparent;font-size:12px;font-weight:600;cursor:pointer;color:var(--ink3)}
+.stab.on{background:var(--card);color:var(--blue);box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.studio-body{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:12px 18px;flex:1;overflow:hidden}
+.studio-body.single{grid-template-columns:1fr}
+.doc-panel{background:var(--card);border:1px solid var(--br);border-radius:var(--r);display:flex;flex-direction:column;overflow:hidden}
+.doc-head{padding:9px 13px;border-bottom:1px solid var(--br);display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+.doc-title{font-size:12px;font-weight:700}
+.doc-acts{display:flex;gap:5px}
+.doc-body{padding:13px;overflow-y:auto;font-size:12px;line-height:1.7;color:var(--ink2);white-space:pre-wrap;word-break:break-word;flex:1}
+.doc-body.loading{display:flex;align-items:center;justify-content:center;font-style:italic;color:var(--ink3)}
+.small-btn{font-size:11px;font-weight:600;padding:5px 10px;border-radius:var(--rs);border:1px solid var(--br2);background:var(--card);color:var(--ink2);cursor:pointer}
+.small-btn:hover{background:var(--card2)}
+.green-btn{border-color:#a7f3d0;background:var(--green-l);color:var(--green)}
+.blue-btn{border:none;background:var(--blue);color:#fff}
+.blue-btn:hover{background:var(--blue-d)}
+
+/* ─── TRACKER PAGE ─── */
+#pg-tracker{flex-direction:column;min-height:100vh;padding:24px;background:var(--bg)}
+.tracker-wrap{max-width:920px;margin:0 auto;width:100%}
+.tracker-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;gap:10px}
+.kanban{display:grid;grid-template-columns:repeat(4,1fr);gap:9px}
+.kanban-col{background:var(--card2);border-radius:var(--r);padding:10px;min-height:220px}
+.col-head{font-size:10px;font-weight:700;color:var(--ink3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:9px;display:flex;justify-content:space-between;align-items:center}
+.col-count{background:var(--br);color:var(--ink2);border-radius:9px;padding:0 6px;font-size:10px}
+.kan-card{background:var(--card);border:1px solid var(--br);border-radius:var(--rs);padding:10px 11px;margin-bottom:6px}
+.kan-score{font-size:12px;font-weight:800;font-family:'JetBrains Mono',monospace}
+.kan-title{font-size:11px;font-weight:600;margin:2px 0}
+.kan-co{font-size:10px;color:var(--ink3)}
+.kan-date{font-size:10px;color:var(--ink3);margin-top:3px}
+.kan-acts{display:flex;gap:3px;margin-top:6px;flex-wrap:wrap}
+.kan-btn{font-size:10px;font-weight:600;padding:3px 7px;border-radius:4px;border:none;cursor:pointer}
+
+/* ─── DIAGNOSTICS PAGE ─── */
+#pg-diag{flex-direction:column;min-height:100vh;padding:24px;background:var(--bg)}
+.diag-wrap{max-width:760px;margin:0 auto;width:100%}
+.diag-score-ring{width:120px;height:120px;margin:0 auto 20px;position:relative;display:flex;align-items:center;justify-content:center}
+.ring-bg{fill:none;stroke:var(--card2);stroke-width:8}
+.ring-fill{fill:none;stroke-width:8;stroke-linecap:round;transition:stroke-dashoffset .8s ease;transform:rotate(-90deg);transform-origin:50% 50%}
+.ring-num{font-size:28px;font-weight:800;font-family:'JetBrains Mono',monospace;fill:var(--ink)}
+.ring-sub{font-size:10px;fill:var(--ink3)}
+.diag-dims{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:20px}
+.dim-card{background:var(--card);border:1px solid var(--br);border-radius:var(--rs);padding:12px;text-align:center}
+.dim-score{font-size:22px;font-weight:800;font-family:'JetBrains Mono',monospace}
+.dim-max{font-size:11px;color:var(--ink3)}
+.dim-label{font-size:11px;color:var(--ink3);margin-top:3px}
+.dim-bar{height:4px;background:var(--card2);border-radius:2px;margin-top:6px}
+.dim-fill{height:100%;border-radius:2px;transition:width .8s}
+.issues-list{display:flex;flex-direction:column;gap:8px}
+.issue-card{background:var(--card);border:1px solid var(--br);border-radius:var(--rs);padding:12px 14px;display:flex;gap:12px;align-items:flex-start}
+.issue-sev{font-size:9px;font-weight:800;padding:3px 7px;border-radius:7px;white-space:nowrap;flex-shrink:0;margin-top:1px}
+.sev-critical{background:var(--red-l);color:var(--red)}
+.sev-important{background:var(--amber-l);color:var(--amber)}
+.sev-minor{background:var(--green-l);color:var(--green)}
+.issue-content{}
+.issue-what{font-size:12px;font-weight:600;color:var(--ink);margin-bottom:3px}
+.issue-fix{font-size:11px;color:var(--ink3);line-height:1.5}
+.run-diag-btn{width:100%;padding:13px;border-radius:var(--rs);border:none;background:var(--blue);color:#fff;font-size:14px;font-weight:700;cursor:pointer;margin-bottom:20px}
+.run-diag-btn:hover{background:var(--blue-d)}
+
+/* ─── MODALS ─── */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.48);z-index:1000;display:none;align-items:center;justify-content:center;padding:20px}
+.modal-overlay.on{display:flex}
+.modal{background:var(--card);border-radius:16px;width:460px;max-width:95vw;padding:36px;position:relative}
+.modal-x{position:absolute;top:12px;right:14px;background:none;border:none;font-size:20px;cursor:pointer;color:var(--ink3)}
+.modal-icon{font-size:40px;text-align:center;margin-bottom:14px}
+.modal-title{font-size:20px;font-weight:800;text-align:center;margin-bottom:8px;letter-spacing:-.02em}
+.modal-sub{font-size:13px;color:var(--ink3);text-align:center;line-height:1.6;margin-bottom:20px}
+.price-box{background:var(--blue-l);border:1px solid #b5cfe8;border-radius:var(--r);padding:18px;text-align:center;margin-bottom:18px}
+.price-num{font-size:34px;font-weight:800;color:var(--blue);font-family:'JetBrains Mono',monospace}
+.price-note{font-size:12px;color:var(--ink3);margin-top:3px}
+.price-tag{display:inline-block;background:var(--green-l);color:var(--green);font-size:11px;font-weight:700;padding:3px 9px;border-radius:10px;margin-top:6px}
+.modal-feats{display:flex;flex-direction:column;gap:7px;margin-bottom:20px}
+.mfeat{display:flex;gap:8px;align-items:flex-start;font-size:13px}
+.modal-cta{width:100%;padding:13px;border-radius:var(--rs);border:none;background:var(--blue);color:#fff;font-size:14px;font-weight:700;cursor:pointer;margin-bottom:8px}
+.modal-cta:hover{background:var(--blue-d)}
+.modal-skip{width:100%;padding:6px;border:none;background:transparent;font-size:12px;color:var(--ink3);cursor:pointer;text-decoration:underline}
+.settings-modal .modal{text-align:left;width:440px}
+.srow{margin-bottom:14px}
+.srow label{font-size:11px;font-weight:600;color:var(--ink3);text-transform:uppercase;letter-spacing:.04em;display:block;margin-bottom:5px}
+.sinp{width:100%;padding:9px 12px;border:1.5px solid var(--br2);border-radius:var(--rs);font-size:12px;font-family:'JetBrains Mono',monospace;color:var(--ink);background:var(--card);outline:none}
+.sinp:focus{border-color:var(--blue)}
+.sinp.normal{font-family:'Inter',sans-serif}
+.save-btn{padding:10px 20px;border-radius:var(--rs);border:none;background:var(--blue);color:#fff;font-size:13px;font-weight:700;cursor:pointer}
+.danger-btn{padding:10px 16px;border-radius:var(--rs);border:1px solid var(--br2);background:transparent;font-size:13px;color:var(--red);cursor:pointer}
+.celebrate .modal-icon{animation:bounce 1s infinite}
+@keyframes bounce{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}
+
+/* ─── SKELETON LOADERS ─── */
+@keyframes shimmer{0%{background-position:-400px 0}100%{background-position:400px 0}}
+.skeleton{background:linear-gradient(90deg,var(--card2) 25%,#e8e9f0 50%,var(--card2) 75%);background-size:800px 100%;animation:shimmer 1.4s infinite}
+.skel-card{background:var(--card);border:1px solid var(--br);border-radius:var(--r);padding:13px 15px;margin-bottom:7px}
+.skel-line{height:12px;border-radius:6px;margin-bottom:8px}
+.skel-short{width:40%}.skel-med{width:65%}.skel-long{width:90%}.skel-score{width:48px;height:48px;border-radius:10px;flex-shrink:0}
+
+/* ─── SCAN PHASE INDICATOR ─── */
+.phase-bar{background:var(--card);border:1px solid var(--br);border-radius:var(--rs);padding:8px 13px;margin-bottom:8px;display:none}
+.phase-bar.on{display:flex;align-items:center;gap:10px}
+.phase-steps{display:flex;gap:6px;flex:1;flex-wrap:wrap}
+.phase-step{font-size:10px;font-weight:600;padding:3px 9px;border-radius:8px;background:var(--card2);color:var(--ink3)}
+.phase-step.running{background:var(--blue-l);color:var(--blue)}
+.phase-step.done{background:var(--green-l);color:var(--green)}
+.phase-step.error{background:var(--red-l);color:var(--red)}
+
+/* ─── JOB CARD SCORE ANIMATION ─── */
+@keyframes scoreIn{from{transform:scale(.6);opacity:0}to{transform:scale(1);opacity:1}}
+.score-badge.new{animation:scoreIn .3s ease}
+
+/* ─── TOAST NOTIFICATIONS ─── */
+.toast{position:fixed;bottom:28px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:11px 22px;border-radius:12px;font-size:13px;font-weight:600;z-index:9999;opacity:0;transition:opacity .25s,transform .25s;pointer-events:none;max-width:85vw;text-align:center;white-space:nowrap}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.toast.error{background:var(--red)}
+.toast.success{background:var(--green)}
+.toast.warning{background:var(--amber)}
+
+/* ─── DEMO MODE BANNER ─── */
+.demo-banner{width:100%;background:linear-gradient(90deg,#7c3aed,#4361EE);color:#fff;text-align:center;padding:8px 16px;font-size:12px;font-weight:600;position:fixed;top:52px;left:0;right:0;z-index:90;display:none}
+.demo-banner.on{display:block}
+.demo-or{display:flex;gap:10px;align-items:center;width:480px;max-width:92vw;margin:12px 0 4px}
+.demo-or-line{flex:1;height:1px;background:var(--br2)}
+
+/* ─── SKILL CHIP EDIT ─── */
+.chip-remove{cursor:pointer;margin-left:4px;opacity:.6;font-size:10px}
+.chip-remove:hover{opacity:1}
+.add-skill-row{display:flex;gap:6px;margin-top:8px}
+.add-skill-inp{flex:1;padding:5px 10px;border:1px solid var(--br2);border-radius:14px;font-size:11px;outline:none}
+.add-skill-inp:focus{border-color:var(--blue)}
+.add-skill-btn{padding:5px 11px;border-radius:14px;border:none;background:var(--blue-l);color:var(--blue);font-size:11px;font-weight:700;cursor:pointer}
+
+/* ─── RESPONSIVE ─── */
+@media(max-width:768px){
+  #pg-results{flex-direction:column}
+  .log-pane{width:100%;height:110px;border-left:none;border-top:1px solid var(--br)}
+  .stats-row{grid-template-columns:repeat(3,1fr)}
+  .studio-body{grid-template-columns:1fr}
+  .kanban{grid-template-columns:1fr 1fr}
+  .diag-dims{grid-template-columns:repeat(2,1fr)}
+  .hero-h{font-size:27px}
+}
+@media print{
+  .studio-bar,.doc-panel:first-child,.log-pane,#topbar{display:none!important}
+  #pg-studio{height:auto}
+  .studio-body{display:block;padding:0}
+  .doc-body{font-size:11pt;line-height:1.6;padding:0;color:#000;white-space:pre-wrap}
+  @page{margin:1in}
+}
+::-webkit-scrollbar{width:4px}
+::-webkit-scrollbar-thumb{background:#d0d3e0;border-radius:2px}
+</style>
+</head>
+<body>
+
+<!-- ═══ TOP BAR ═══ -->
+<div id="topbar">
+  <span class="brand">JobPilot</span>
+  <div class="topbar-right">
+    <span class="pill-free" id="pill-free" onclick="openModal('m-upgrade')"></span>
+    <button class="icon-btn" onclick="showPg('pg-diag')">🩺 Diagnose</button>
+    <button class="icon-btn" onclick="openModal('m-settings')">⚙ Settings</button>
+  </div>
+</div>
+
+<!-- ═══ PAGE: SETUP ═══ -->
+<div class="pg on" id="pg-setup">
+  <div class="setup-card">
+    <div class="setup-logo">🚀</div>
+    <div class="setup-title">JobPilot v2</div>
+    <div class="setup-sub">India's first AI job command centre.<br>Real jobs · AI-scored · Tailored resume in 2 min.</div>
+
+    <!-- HERO: Try Demo FIRST — no friction -->
+    <button onclick="runDemo()" style="width:100%;padding:16px;border-radius:var(--r);border:none;background:linear-gradient(135deg,var(--blue),#6c3aed);color:#fff;font-size:15px;font-weight:800;cursor:pointer;margin-bottom:10px;letter-spacing:-.01em">
+      🎮 Try live demo — 5 scored Indian PM jobs in 10 seconds
+    </button>
+    <div style="font-size:11px;color:var(--ink3);text-align:center;margin-bottom:20px">No account · No API keys · See exactly what you get</div>
+
+    <div class="demo-or"><div class="demo-or-line"></div><span style="font-size:11px;color:var(--ink3);padding:0 10px;white-space:nowrap">OR set up your own keys for a full live scan</span><div class="demo-or-line"></div></div>
+
+    <details style="margin-top:14px" id="key-details">
+      <summary style="cursor:pointer;font-size:13px;font-weight:700;color:var(--ink2);padding:10px 0;list-style:none;display:flex;align-items:center;justify-content:space-between">
+        <span>⚙ Set up API keys (2 minutes)</span>
+        <span style="font-size:11px;color:var(--ink3);font-weight:400">Qwen3.7-Max · JSearch · OpenRouter</span>
+      </summary>
+      <div style="margin-top:12px">
+
+    <!-- Step 1: OpenRouter -->
+    <div class="setup-step">
+      <div class="setup-step-head">
+        <span class="step-num">1</span>
+        <span class="step-title">OpenRouter API Key</span>
+        <span class="step-badge badge-required">Required · AI Features</span>
+      </div>
+      <div class="step-desc">Powers AI scoring, resume tailoring, cover letters &amp; interview prep. Costs ~₹0.05–0.50 per full scan. Pay only for what you use.</div>
+      <div class="key-field">
+        <input type="password" id="or-key" placeholder="sk-or-v1-…" autocomplete="off" spellcheck="false">
+        <button class="eye-btn" onclick="toggleEye('or-key')">👁</button>
+      </div>
+      <a class="get-key-link" href="https://openrouter.ai/keys" target="_blank">→ Get a free OpenRouter key (60 seconds)</a>
+      <div class="model-row">
+        <label>Primary AI Model</label>
+        <select id="ai-model">
+          <optgroup label="── Recommended for JobPilot ──">
+            <option value="qwen/qwq-32b">Qwen3.7-Max (QwQ-32B) — Primary · Best quality ⭐</option>
+            <option value="deepseek/deepseek-chat">DeepSeek V3 (Chat) — Fast batch scoring</option>
+          </optgroup>
+          <optgroup label="── OpenAI ──">
+            <option value="openai/gpt-4o-mini">GPT-4o Mini — Fast &amp; cheap fallback</option>
+            <option value="openai/gpt-4o">GPT-4o — High quality fallback</option>
+          </optgroup>
+          <optgroup label="── Anthropic / Google ──">
+            <option value="anthropic/claude-3-5-sonnet-20241022">Claude 3.5 Sonnet</option>
+            <option value="anthropic/claude-3-haiku-20240307">Claude 3 Haiku — Fastest</option>
+            <option value="google/gemini-flash-1.5">Gemini Flash 1.5</option>
+          </optgroup>
+        </select>
+      </div>
+    </div>
+
+    <!-- Step 2: JSearch -->
+    <div class="setup-step">
+      <div class="setup-step-head">
+        <span class="step-num">2</span>
+        <span class="step-title">RapidAPI Key (JSearch)</span>
+        <span class="step-badge badge-optional">Recommended · Real Jobs</span>
+      </div>
+      <div class="step-desc">Fetches REAL, LIVE jobs from LinkedIn, Indeed &amp; Glassdoor via JSearch — a licensed aggregator API. Without this, only company boards (Greenhouse + Lever) load. Free tier: 200 requests/month.</div>
+      <div class="key-field">
+        <input type="password" id="rapid-key" placeholder="Your RapidAPI key…" autocomplete="off" spellcheck="false">
+        <button class="eye-btn" onclick="toggleEye('rapid-key')">👁</button>
+      </div>
+      <a class="get-key-link" href="https://rapidapi.com/letscrape-6baf1d1cef0b/api/jsearch" target="_blank">→ Subscribe to JSearch on RapidAPI (free tier available)</a>
+      <div class="cost-note">⚡ <b>Legal &amp; compliant:</b> JSearch is a licensed data aggregator. You are calling their API — not scraping LinkedIn directly.</div>
+    </div>
+
+    <button class="setup-cta" onclick="saveSetup()">Save keys &amp; Launch →</button>
+    <div id="setup-err" class="setup-err">Please enter your OpenRouter key to continue.</div>
+    <div class="setup-legal" style="margin-top:10px">
+      Keys stored only in your browser · Never sent to any server
+    </div>
+
+      </div><!-- end details inner -->
+    </details><!-- end details -->
+
+    <div style="margin-top:16px;font-size:11px;color:var(--ink3);text-align:center;line-height:1.7">
+      Job data via <b>Greenhouse API</b> &amp; <b>JSearch/RapidAPI</b> · <b>OpenRouter</b> for AI · All trademarks belong to respective owners
+    </div>
+  </div>
+</div>
+
+<!-- ═══ PAGE: UPLOAD ═══ -->
+<div class="pg" id="pg-upload">
+  <div class="resume-saved-bar" id="resume-saved-bar">
+    ✅ <span id="resume-saved-txt">Previous resume loaded</span>
+    <button style="margin-left:auto;background:none;border:none;color:var(--green);font-size:11px;font-weight:700;cursor:pointer" onclick="clearResume()">Replace</button>
+  </div>
+  <div class="hero-badge"><span class="bdot"></span> Real jobs · LinkedIn · Indeed · Glassdoor · 300+ companies</div>
+  <h1 class="hero-h">One command centre.<br>Every job. <span class="hi">Best match wins.</span></h1>
+  <p class="hero-p">Upload your resume once. JobPilot fetches real jobs from 30+ sources, scores every match against your profile, and builds your application package in 2 minutes.</p>
+
+  <div class="drop-zone" id="drop-zone" onclick="document.getElementById('file-inp').click()">
+    <input type="file" id="file-inp" accept=".pdf,.docx" onchange="handleFile(this.files[0])">
+    <div class="drop-ico" id="drop-ico">📄</div>
+    <div class="drop-t" id="drop-t">Drop your resume here</div>
+    <div class="drop-s" id="drop-s">PDF or DOCX · click to browse</div>
+  </div>
+  <div class="or-sep">— or paste resume text —</div>
+  <div class="paste-area"><textarea id="paste-txt" placeholder="Paste your resume here…"></textarea></div>
+
+  <div class="pref-grid">
+    <div class="pref-wrap">
+      <input class="pref-inp" id="p-loc" placeholder="📍 City (e.g. Pune, Bangalore…)" autocomplete="off"
+        oninput="showSug('loc')" onfocus="showSug('loc')" onblur="hideSug('loc',300)">
+      <div class="sug-box" id="sug-loc"></div>
+    </div>
+    <div class="pref-wrap">
+      <input class="pref-inp" id="p-role" placeholder="🎯 Role (e.g. Product Manager…)" autocomplete="off"
+        oninput="showSug('role')" onfocus="showSug('role')" onblur="hideSug('role',300)">
+      <div class="sug-box" id="sug-role"></div>
+    </div>
+    <div class="pref-wrap">
+      <select class="pref-inp" id="p-type">
+        <option value="FULLTIME">💼 Full-time</option>
+        <option value="REMOTE">🌐 Remote</option>
+        <option value="HYBRID">🏠 Hybrid</option>
+        <option value="">Any type</option>
+      </select>
+    </div>
+    <div class="pref-wrap">
+      <select class="pref-inp" id="p-exp">
+        <option value="">Any experience level</option>
+        <option value="ENTRY_LEVEL">Entry level (0-2 yrs)</option>
+        <option value="MID_LEVEL">Mid level (3-5 yrs)</option>
+        <option value="SENIOR_LEVEL">Senior level (6-10 yrs)</option>
+        <option value="DIRECTOR">Director / Lead (10+ yrs)</option>
+      </select>
+    </div>
+  </div>
+
+  <button class="start-btn" onclick="handleStart()">Analyse resume &amp; find matching jobs →</button>
+  <div class="upload-footer">Keys saved in your browser · Never re-entered</div>
+</div>
+
+<!-- ═══ PAGE: EXTRACTING ═══ -->
+<div class="pg" id="pg-extract">
+  <div class="ext-card">
+    <div class="spinner"></div>
+    <div class="ext-title">Analysing your resume…</div>
+    <div class="ext-sub">AI is building your professional profile for precise matching.</div>
+    <div class="ext-steps">
+      <div class="exs" id="ex1"><span class="exs-dot">1</span>Parsing document text</div>
+      <div class="exs" id="ex2"><span class="exs-dot">2</span>Extracting skills &amp; achievements</div>
+      <div class="exs" id="ex3"><span class="exs-dot">3</span>Generating optimal search queries</div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ PAGE: PROFILE REVIEW ═══ -->
+<div class="pg" id="pg-profile">
+  <div class="pg-label">Step 2 of 4 — Profile extracted</div>
+  <div class="pg-title">Is this you?</div>
+  <div class="pg-sub">Review and correct what AI extracted. The more accurate this profile, the better your match scores.</div>
+
+  <div class="uvp-box" id="uvp-box" style="display:none">
+    <div class="uvp-label">✦ Your Unique Value Proposition</div>
+    <div class="uvp-text" id="pf-uvp"></div>
+  </div>
+
+  <div class="pf-grid">
+    <div class="pf-card"><div class="pf-label">Name</div><div class="pf-val" id="pf-name">—</div></div>
+    <div class="pf-card"><div class="pf-label">Current Role</div><div class="pf-val" id="pf-role">—</div></div>
+    <div class="pf-card"><div class="pf-label">Experience</div><div class="pf-val" id="pf-yrs">—</div></div>
+    <div class="pf-card"><div class="pf-label">Seniority</div><div class="pf-val" id="pf-sen">—</div></div>
+    <div class="pf-card"><div class="pf-label">Target Role</div><div class="pf-val" id="pf-target">—</div></div>
+    <div class="pf-card"><div class="pf-label">Domain</div><div class="pf-val" id="pf-domain">—</div></div>
+    <div class="pf-card" style="grid-column:1/-1">
+      <div class="pf-label">Key Skills — click × to remove · type below to add</div>
+      <div class="chips" id="pf-skills"></div>
+      <div class="add-skill-row">
+        <input class="add-skill-inp" id="skill-inp" placeholder="Add a skill…" onkeydown="if(event.key==='Enter')addSkill()">
+        <button class="add-skill-btn" onclick="addSkill()">+ Add</button>
+      </div>
+    </div>
+    <div class="pf-card" style="grid-column:1/-1"><div class="pf-label">Quantified Achievements — edit if needed</div><textarea class="eda" id="pf-ach" rows="4"></textarea></div>
+  </div>
+
+  <div class="btn-row">
+    <button class="btn-back" onclick="showPg('pg-upload')">← Back</button>
+    <button class="btn-scan" onclick="beginScan()">Start scanning 30+ sources →</button>
+  </div>
+</div>
+
+<!-- ═══ PAGE: RESULTS ═══ -->
+<div class="pg" id="pg-results">
+  <div class="res-main">
+    <div class="res-bar">
+      <span class="res-brand">JobPilot</span>
+      <span class="scan-pill" id="scan-pill"><span class="scan-dot"></span><span id="pill-txt">Scanning…</span></span>
+      <div class="res-actions">
+        <button class="res-action-btn" onclick="showPg('pg-tracker');renderTracker()">📋 Tracker</button>
+        <button class="res-action-btn" onclick="showPg('pg-diag')">🩺 Diagnose</button>
+        <button class="res-action-btn" onclick="showPg('pg-upload')">↻ New search</button>
+      </div>
+    </div>
+    <div class="res-body">
+      <div class="stats-row">
+        <div class="stat-box"><div class="stat-val" id="st-src">0</div><div class="stat-lbl">Sources</div></div>
+        <div class="stat-box"><div class="stat-val" id="st-found">0</div><div class="stat-lbl">Found</div></div>
+        <div class="stat-box"><div class="stat-val" style="color:var(--green)" id="st-strong">0</div><div class="stat-lbl">Strong</div></div>
+        <div class="stat-box"><div class="stat-val" style="color:var(--amber)" id="st-good">0</div><div class="stat-lbl">Good</div></div>
+        <div class="stat-box"><div class="stat-val" style="color:var(--blue)" id="st-tracked">0</div><div class="stat-lbl">Tracked</div></div>
+      </div>
+      <div class="prog-box" id="prog-box">
+        <div class="prog-top"><span id="prog-lbl" style="font-weight:500">Starting…</span><span id="prog-pct" style="color:var(--ink3)">0%</span></div>
+        <div class="prog-track"><div class="prog-fill" id="prog-fill"></div></div>
+      </div>
+      <div class="filter-row" style="margin-bottom:4px">
+        <button class="fb on" id="f-all" onclick="setFilter('all')">All</button>
+        <button class="fb" id="f-strong" onclick="setFilter('strong')">⭐ Strong 75+</button>
+        <button class="fb" id="f-good" onclick="setFilter('good')">Good 50–74</button>
+        <button class="fb" id="f-partial" onclick="setFilter('partial')">Partial</button>
+        <span class="fc" id="feed-count"></span>
+      </div>
+      <div class="filter-row" style="margin-bottom:10px">
+        <span style="font-size:11px;font-weight:600;color:var(--ink3)">Source:</span>
+        <button class="fb on" id="s-all" onclick="setSrc('all')">All</button>
+        <button class="fb" id="s-jsearch" onclick="setSrc('jsearch')">LinkedIn/Indeed</button>
+        <button class="fb" id="s-greenhouse" onclick="setSrc('greenhouse')">Greenhouse</button>
+        <button class="fb" id="s-lever" onclick="setSrc('lever')">Lever</button>
+      </div>
+      <div class="phase-bar" id="phase-bar">
+        <span style="font-size:11px;font-weight:700;color:var(--ink3);flex-shrink:0">Scanning:</span>
+        <div class="phase-steps" id="phase-steps"></div>
+      </div>
+      <div id="skel-list"></div>
+      <div class="empty-feed" id="empty-feed" style="display:none">
+        <div style="font-size:30px;margin-bottom:8px">🔍</div>
+        <div style="font-size:14px;font-weight:600;color:var(--ink2)">No jobs found yet</div>
+        <div style="font-size:12px;margin-top:4px">Try a different role or city</div>
+      </div>
+      <div class="job-list" id="job-list"></div>
+    </div>
+  </div>
+  <div class="log-pane">
+    <div class="log-head"><span class="log-title">Agent log</span><span class="log-badge lb-live" id="log-badge">LIVE</span></div>
+    <div class="log-body" id="log-body"></div>
+  </div>
+</div>
+
+<!-- ═══ PAGE: STUDIO ═══ -->
+<div class="pg" id="pg-studio">
+  <div class="studio-bar">
+    <div class="studio-info">
+      <div class="tab-group">
+        <button class="stab on" id="stab-resume" onclick="switchTab('resume')">📄 Resume</button>
+        <button class="stab" id="stab-cover" onclick="switchTab('cover')">✉️ Cover Letter</button>
+        <button class="stab" id="stab-prep" onclick="switchTab('prep')">🎯 Interview Prep</button>
+      </div>
+      <span style="font-size:11px;color:var(--ink3)" id="studio-for"></span>
+      <span style="font-size:11px;color:var(--green);font-weight:700" id="studio-score"></span>
+    </div>
+    <div style="display:flex;gap:6px">
+      <button class="small-btn" onclick="showPg('pg-results')">← Results</button>
+      <button class="small-btn" onclick="printStudio()">🖨 Print/PDF</button>
+      <button class="small-btn green-btn" onclick="dlStudio()">⬇ Download</button>
+    </div>
+  </div>
+  <div class="studio-body" id="studio-body">
+    <div class="doc-panel" id="orig-panel">
+      <div class="doc-head"><span class="doc-title">Original resume</span><span style="font-size:11px;color:var(--ink3)">Uploaded</span></div>
+      <div class="doc-body" id="orig-body"></div>
+    </div>
+    <div class="doc-panel">
+      <div class="doc-head">
+        <span class="doc-title" id="ai-panel-title" style="color:var(--blue)">✦ AI output</span>
+        <div class="doc-acts">
+          <button class="small-btn" onclick="copyStudio()">Copy</button>
+        </div>
+      </div>
+      <div class="doc-body loading" id="ai-body">Generating…</div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ PAGE: TRACKER ═══ -->
+<div class="pg" id="pg-tracker">
+  <div class="tracker-wrap">
+    <div class="tracker-head">
+      <div>
+        <div style="font-size:21px;font-weight:800">Application Pipeline</div>
+        <div style="font-size:12px;color:var(--ink3);margin-top:2px" id="tracker-sub">0 applications tracked</div>
+      </div>
+      <button class="res-action-btn" onclick="showPg('pg-results')">← Job feed</button>
+    </div>
+    <div class="kanban" id="kanban"></div>
+    <div class="empty-feed" id="tracker-empty">
+      <div style="font-size:28px;margin-bottom:8px">📋</div>
+      <div style="font-size:13px;font-weight:600">No applications yet</div>
+      <div style="font-size:12px;margin-top:4px">Click "+ Track" on any job card</div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ PAGE: DIAGNOSTICS ═══ -->
+<div class="pg" id="pg-diag">
+  <div class="diag-wrap">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px">
+      <div>
+        <div style="font-size:21px;font-weight:800">Resume Health Check</div>
+        <div style="font-size:12px;color:var(--ink3);margin-top:2px">AI audit: ATS compatibility · keyword density · achievement quality · positioning</div>
+      </div>
+      <button class="res-action-btn" onclick="showPg('pg-results')">← Back</button>
+    </div>
+    <button class="run-diag-btn" id="run-diag-btn" onclick="runDiagnostics()">🩺 Run full resume diagnostic</button>
+    <div id="diag-results" style="display:none">
+      <div style="text-align:center;margin-bottom:20px">
+        <svg viewBox="0 0 120 120" width="120" height="120" style="display:block;margin:0 auto 10px">
+          <circle class="ring-bg" cx="60" cy="60" r="52"/>
+          <circle class="ring-fill" id="ring-fill" cx="60" cy="60" r="52" stroke="var(--blue)" stroke-dasharray="327" stroke-dashoffset="327"/>
+          <text class="ring-num" id="ring-num" x="60" y="65" text-anchor="middle">0</text>
+          <text class="ring-sub" x="60" y="78" text-anchor="middle">/100</text>
+        </svg>
+        <div style="font-size:15px;font-weight:700" id="diag-verdict"></div>
+      </div>
+      <div class="diag-dims" id="diag-dims"></div>
+      <div style="font-size:13px;font-weight:700;margin-bottom:12px">Issues found</div>
+      <div class="issues-list" id="issues-list"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ MODAL: UPGRADE ═══ -->
+<div class="modal-overlay" id="m-upgrade">
+  <div class="modal">
+    <button class="modal-x" onclick="closeModal('m-upgrade')">×</button>
+    <div class="modal-icon">✨</div>
+    <div class="modal-title">Unlock unlimited tailoring</div>
+    <div class="modal-sub">You've used your 3 free application packages. Upgrade once — use until you land the job.</div>
+    <div class="price-box">
+      <div class="price-num">₹999</div>
+      <div class="price-note">one-time payment · yours until you get hired</div>
+      <div class="price-tag">No subscriptions. No monthly charges.</div>
+    </div>
+    <div class="modal-feats">
+      <div class="mfeat"><span>✅</span><span>Unlimited tailored resumes</span></div>
+      <div class="mfeat"><span>✅</span><span>Unlimited cover letters</span></div>
+      <div class="mfeat"><span>✅</span><span>Full interview prep per role</span></div>
+      <div class="mfeat"><span>✅</span><span>Resume diagnostics</span></div>
+      <div class="mfeat"><span>✅</span><span>All future updates included</span></div>
+    </div>
+    <button class="modal-cta" onclick="handleUpgrade()">Upgrade for ₹999 →</button>
+    <button class="modal-skip" onclick="closeModal('m-upgrade')">Continue on free tier</button>
+  </div>
+</div>
+
+<!-- ═══ MODAL: CELEBRATE ═══ -->
+<div class="modal-overlay" id="m-celebrate">
+  <div class="modal celebrate">
+    <button class="modal-x" onclick="closeModal('m-celebrate')">×</button>
+    <div class="modal-icon">🎉</div>
+    <div class="modal-title">You got the job!</div>
+    <div class="modal-sub">Moving to Offer is a massive milestone. Congratulations!<br><br>Know someone else who's job hunting? Share JobPilot — help them land their next role too.</div>
+    <button class="modal-cta" onclick="shareApp()">Share JobPilot with a friend</button>
+    <button class="modal-skip" onclick="closeModal('m-celebrate')">Close</button>
+  </div>
+</div>
+
+<!-- ═══ MODAL: SETTINGS ═══ -->
+<div class="modal-overlay settings-modal" id="m-settings">
+  <div class="modal">
+    <button class="modal-x" onclick="closeModal('m-settings')">×</button>
+    <div style="font-size:18px;font-weight:800;margin-bottom:18px">Settings</div>
+    <div id="free-status" style="font-size:12px;background:var(--card2);border-radius:var(--rs);padding:9px 12px;margin-bottom:16px"></div>
+    <div class="srow"><label>OpenRouter Key</label><input class="sinp" type="password" id="s-or-key" placeholder="sk-or-v1-…"></div>
+    <div class="srow"><label>RapidAPI Key (JSearch — job aggregation)</label><input class="sinp" type="password" id="s-rapid-key" placeholder="Your RapidAPI key…"></div>
+    <div style="background:var(--blue-l);border:1px solid #b5cfe8;border-radius:var(--rs);padding:10px 12px;margin-bottom:14px;font-size:11px;color:var(--blue)">
+      <b>3-Tier Model Routing</b><br>Primary = complex tasks · Batch = bulk scoring (10× cheaper) · Local = private data
+    </div>
+    <div class="srow">
+      <label>Primary Model (resume analysis, tailoring, strategy)</label>
+      <input class="sinp" id="s-primary-model" placeholder="qwen/qwq-32b" value="qwen/qwq-32b">
+    </div>
+    <div class="srow">
+      <label>Batch Model (bulk JD scoring, keyword extraction)</label>
+      <input class="sinp" id="s-batch-model" placeholder="deepseek/deepseek-v3" value="deepseek/deepseek-v3">
+    </div>
+    <div style="background:var(--green-l);border:1px solid #a7f3d0;border-radius:var(--rs);padding:10px 12px;margin-bottom:10px;font-size:11px;color:var(--green)">
+      <b>Local / Self-Hosted (Qwen3.6-35B-A3B via Ollama)</b> — resume data stays on your device
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+      <input type="checkbox" id="s-use-local" style="width:16px;height:16px">
+      <label for="s-use-local" style="font-size:12px;font-weight:600;cursor:pointer">Use local model for resume tailoring (privacy mode)</label>
+    </div>
+    <div class="srow"><label>Local Endpoint (Ollama URL)</label><input class="sinp" id="s-local-ep" placeholder="http://localhost:11434"></div>
+    <div class="srow"><label>Local Model Name</label><input class="sinp" id="s-local-model" placeholder="qwen2.5:32b"></div>
+    <div style="padding:10px 12px;background:var(--card2);border-radius:var(--rs);font-size:11px;color:var(--ink3);margin-bottom:14px;line-height:1.7">
+      <b style="color:var(--ink)">Model IDs on OpenRouter:</b><br>
+      Qwen3.7-Max (Primary) → <code>qwen/qwq-32b</code><br>
+      DeepSeek V4 Flash (Batch) → <code>deepseek/deepseek-v3</code><br>
+      GPT-4o Mini (Fallback) → <code>openai/gpt-4o-mini</code>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="save-btn" onclick="saveSettings()">Save settings</button>
+      <button class="danger-btn" onclick="clearAll()">Clear all data</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ DEMO BANNER ═══ -->
+<div class="demo-banner" id="demo-banner">
+  🎮 DEMO MODE — Sample data loaded. <a href="#" onclick="exitDemo();return false" style="color:#fff;text-decoration:underline;margin-left:8px">Exit demo → Enter your keys</a>
+</div>
+
+<!-- ═══ TOAST ═══ -->
+<div class="toast" id="toast"></div>
+
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+const $=id=>document.getElementById(id);
+
+/* ══════════════════════════════════════════════════════
+   HOSTED MODE DETECTION
+   When running on zynetra.tech/jobpilot (or any HTTPS host),
+   all AI + job search calls go through secure server-side
+   API proxies. Users need ZERO API keys.
+   When running as a local file, uses direct OpenRouter/JSearch.
+══════════════════════════════════════════════════════ */
+const HOSTED = (
+  window.JOBPILOT_HOSTED === true ||
+  (window.location.protocol === 'https:' &&
+   !window.location.hostname.includes('localhost') &&
+   !window.location.hostname.includes('127.0.0.1') &&
+   window.location.protocol !== 'file:')
+);
+const API_AI     = HOSTED ? '/api/ai'     : null;
+const API_SEARCH = HOSTED ? '/api/search' : null;
+
+if(HOSTED) console.log('[JobPilot] Hosted mode — using server-side API proxies');
+
+/* ══ CONSTANTS ══ */
+const LOCS=['Pune','Bangalore','Mumbai','Delhi NCR','Hyderabad','Chennai','Kolkata','Ahmedabad','Noida','Gurgaon','Remote','Pan India'];
+const ROLES=['Product Manager','Senior Product Manager','Technical Product Manager','AI/ML Product Manager','GenAI Product Manager','Engineering Manager','Software Engineer','Senior Software Engineer','Full Stack Developer','Data Scientist','Data Engineer','UX Designer','Business Analyst','Program Manager','DevOps Engineer','Solution Architect'];
+
+/* Verified Greenhouse company slugs (confirmed working) */
+const GH_COS=[
+  {slug:'nutanix',name:'Nutanix'},{slug:'rapid7',name:'Rapid7'},
+  {slug:'druva',name:'Druva'},{slug:'qualys',name:'Qualys'},
+  {slug:'pubmatic',name:'PubMatic'},{slug:'bmc',name:'BMC Software'},
+  {slug:'cloudflare',name:'Cloudflare'},{slug:'mongodb',name:'MongoDB'},
+  {slug:'datadog',name:'Datadog'},{slug:'gitlab',name:'GitLab'},
+];
+
+/* Role terms that must appear in job title for it to be considered relevant */
+const ROLE_MATCH_TERMS=['product manager','product management','pm ','(pm)','platform lead','product lead','product owner','product director','product vp','vp of product','head of product','ai pm','genai','technical pm'];
+const ROLE_EXCLUDE_TERMS=['account manager','account executive','support engineer','customer success','sales engineer','software test','qa engineer','devops engineer','site reliability','scrum master','recruiter','talent acquisition','marketing','finance','legal','content writer','data entry'];
+
+const COLS=['To Apply','Applied','Interview','Offer'];
+const CK={'To Apply':'#e8f0f9','Applied':'#faeeda','Interview':'#eeedfe','Offer':'#e4f5ef'};
+const CT={'To Apply':'#0c447c','Applied':'#633806','Interview':'#3c3489','Offer':'#085041'};
+const FREE_LIMIT=3;
+const JSEARCH_QUERIES=3;
+const TOTAL_SRCS=GH_COS.length+JSEARCH_QUERIES;
+const MAX_PARALLEL_SCORE=2; /* max concurrent AI scoring calls to avoid rate limits */
+
+/* ══ MODEL TIERS
+   PRIMARY  → Qwen3.7-Max  : resume analysis, JD matching, rewriting, interview prep, strategy
+   BATCH    → DeepSeek V4  : bulk JD scoring, keyword extraction, classification (cheap & fast)
+   LOCAL    → Self-hosted   : privacy-sensitive ops, data stays on device via Ollama proxy
+══ */
+const MODEL_PRIMARY  = 'qwen/qwq-32b';               // Qwen3.7-Max equivalent on OpenRouter
+const MODEL_BATCH='deepseek/deepseek-chat';        // DeepSeek V4 Flash equivalent
+const MODEL_FALLBACK = 'openai/gpt-4o-mini';          // safe fallback if Qwen unavailable
+
+/* ══ 4-CLASS JOB CLASSIFICATION
+   DIRECT FIT   75-100 : Resume matches most requirements. Apply immediately.
+   ADJACENT FIT 50-74  : Strong adjacent experience. High potential with positioning.
+   STRETCH      25-49  : Significant gaps. Apply only if strategically critical.
+   AVOID        0-24   : Fundamental mismatch. Time better spent elsewhere.
+══ */
+const VERDICT_MAP={
+  'DIRECT FIT':  {label:'DIRECT FIT',  cls:'bdg-green',  min:75},
+  'ADJACENT FIT':{label:'ADJACENT FIT',cls:'bdg-amber',  min:50},
+  'STRETCH':     {label:'STRETCH',     cls:'bdg-blue',   min:25},
+  'AVOID':       {label:'AVOID',       cls:'bdg-red',    min:0},
+};
+
+/* ══ STATE ══ */
+const APP={
+  orKey:'',rapidKey:'',
+  primaryModel:MODEL_PRIMARY,
+  batchModel:MODEL_BATCH,
+  localEndpoint:'',localModel:'qwen2.5:32b',
+  useLocal:false,
+  jobs:[],apps:[],filter:'all',src:'all',
+  done:0,openJob:null,
+  resumeText:'',profile:null,queries:[],
+  tailorJob:null,currentTab:'resume',
+  tailored:'',cover:'',prep:'',
+  tailorsUsed:0,isPro:false,
+};
+
+/* ══ PERSISTENCE ══ */
+function save(){
+  try{
+    localStorage.setItem('jp2_jobs',JSON.stringify(APP.jobs.slice(0,60)));
+    localStorage.setItem('jp2_apps',JSON.stringify(APP.apps));
+    if(APP.profile)localStorage.setItem('jp2_profile',JSON.stringify(APP.profile));
+    if(APP.resumeText)localStorage.setItem('jp2_resume',APP.resumeText.slice(0,60000));
+    localStorage.setItem('jp2_loc',$('p-loc')?.value||'');
+    localStorage.setItem('jp2_role',$('p-role')?.value||'');
+  }catch(e){}
+}
+function load(){
+  try{
+    const j=localStorage.getItem('jp2_jobs'),a=localStorage.getItem('jp2_apps'),p=localStorage.getItem('jp2_profile'),r=localStorage.getItem('jp2_resume');
+    if(j)APP.jobs=JSON.parse(j);
+    if(a)APP.apps=JSON.parse(a);
+    if(p)APP.profile=JSON.parse(p);
+    if(r)APP.resumeText=r;
+  }catch(e){}
+}
+
+/* ══ INIT ══ */
+(function init(){
+  APP.orKey=localStorage.getItem('jp2_or')||'';
+  APP.rapidKey=localStorage.getItem('jp2_rapid')||'';
+  APP.primaryModel=localStorage.getItem('jp2_primary')||MODEL_PRIMARY;
+  APP.batchModel=localStorage.getItem('jp2_batch')||MODEL_BATCH;
+  APP.localEndpoint=localStorage.getItem('jp2_local_ep')||'';
+  APP.localModel=localStorage.getItem('jp2_local_model')||'qwen2.5:32b';
+  APP.useLocal=localStorage.getItem('jp2_use_local')==='true';
+  APP.tailorsUsed=parseInt(localStorage.getItem('jp2_used')||'0');
+  APP.isPro=localStorage.getItem('jp2_pro')==='true';
+  load();
+
+  /* HOSTED MODE: skip key setup entirely — go straight to upload */
+  if(HOSTED){
+    showPg('pg-upload');$('topbar').style.display='flex';updatePill();
+    /* Show "Hosted — no keys needed" badge in topbar */
+    const badge=document.createElement('span');
+    badge.style.cssText='font-size:10px;background:var(--green-l);color:var(--green);padding:3px 9px;border-radius:8px;font-weight:700;border:1px solid #a7f3d0';
+    badge.textContent='✓ Hosted — no keys needed';
+    document.querySelector('.topbar-right')?.prepend(badge);
+    return;
+  }
+  if(!APP.orKey){showPg('pg-setup');return;}
+  showPg('pg-upload');
+  $('topbar').style.display='flex';
+  updatePill();
+  const loc=localStorage.getItem('jp2_loc'),role=localStorage.getItem('jp2_role');
+  if(loc&&$('p-loc'))$('p-loc').value=loc;
+  if(role&&$('p-role'))$('p-role').value=role;
+  if(APP.resumeText){const b=$('resume-saved-bar');if(b){b.style.display='flex';$('resume-saved-txt').textContent='Previous resume loaded — or drop a new one';}}
+  if(APP.jobs.length){
+    const nb=document.createElement('div');
+    nb.style.cssText='width:480px;max-width:92vw;margin-top:10px;background:var(--blue-l);border:1px solid #b5cfe8;border-radius:var(--rs);padding:9px 13px;font-size:12px;color:var(--blue);display:flex;align-items:center;gap:8px';
+    nb.innerHTML=`📋 ${APP.jobs.length} jobs from last scan saved. <button onclick="showPg('pg-results');renderFeed()" style="margin-left:auto;background:var(--blue);color:#fff;border:none;padding:4px 10px;border-radius:6px;cursor:pointer;font-size:11px;font-weight:700">View →</button>`;
+    $('pg-upload').appendChild(nb);
+  }
+  const ms=$('ai-model');if(ms){const o=ms.querySelector(`option[value="${APP.model}"]`);if(o)o.selected=true;}
+})();
+
+/* ══ TOAST — replaces all alert() calls ══ */
+function toast(msg,type='info',ms=3200){
+  const el=$('toast');if(!el)return;
+  el.textContent=msg;
+  el.className='toast '+(type==='error'?'error':type==='success'?'success':type==='warning'?'warning':'');
+  el.classList.add('show');
+  clearTimeout(el._t);el._t=setTimeout(()=>el.classList.remove('show'),ms);
+}
+
+/* ══ DEMO MODE ══ */
+const DEMO_PROFILE={name:'Demo User',email:'demo@example.com',phone:'',current_role:'Senior Product Manager',current_company:'TechCorp India',years:8,target_role:'Director of Product / AI PM',domain:'B2B SaaS / AI Products',seniority:'senior',skills:['Product Strategy','AI/ML Product Management','Roadmap Planning','Agile / Scrum','User Research','Data Analytics','OKRs','Stakeholder Management','API Products','GenAI','RAG Systems','Product-Led Growth','A/B Testing','SQL','Figma'],achievements:['Led AI feature launch reducing customer churn by 34%','Grew product ARR from $2M to $8M in 18 months','Managed cross-functional team of 12 engineers','Shipped 3 ML-powered features with 92% user adoption','Reduced time-to-onboard from 14 days to 3 days'],education:'B.Tech Computer Science, IIT Pune (2016)',unique_value:'Led end-to-end AI product builds (RAG + agents) with measurable revenue impact at B2B SaaS scale — rare combination of technical depth and business ownership.'};
+
+const DEMO_JOBS=[
+  {id:'demo-1',title:'Senior Product Manager — AI Platform',company:'Nutanix',location:'Pune, India',url:'https://boards.greenhouse.io/nutanix',source:'Greenhouse',boardId:'greenhouse',dataType:'verified',salary:'₹40L–60L/yr',posted:new Date(Date.now()-2*86400000),score:87,breakdown:{skills:32,experience:22,domain:18,achievements:15},verdict:'DIRECT FIT',why:'Strong AI product background aligns directly with Nutanix\'s cloud infrastructure intelligence roadmap.',strengths:['AI/ML product experience maps to their AIOps platform','8 years seniority matches Senior PM expectations','B2B SaaS domain directly relevant to enterprise cloud'],gaps:['Kubernetes / container orchestration exposure would strengthen fit'],keywords:['AIOps','cloud infrastructure','platform PM','roadmap','enterprise SaaS'],headline:'Senior AI Platform PM | 8 Yrs B2B SaaS | RAG + ML',apply_strategy:'Lead with your RAG system experience — Nutanix is building AI-assisted ops; that directly maps.',interview_q:['Tell me about a time you shipped an AI feature that had measurable business impact','How do you prioritise AI capabilities against traditional product features?','Describe how you\'ve worked with ML engineers to define model success metrics']},
+  {id:'demo-2',title:'Technical Product Manager — Payments',company:'Razorpay',location:'Bangalore, India',url:'https://api.lever.co/v0/postings/razorpay',source:'Lever',boardId:'lever',dataType:'verified',salary:'₹35L–55L/yr',posted:new Date(Date.now()-4*86400000),score:68,breakdown:{skills:25,experience:20,domain:13,achievements:10},verdict:'ADJACENT FIT',why:'Strong PM fundamentals and API product experience transfer well; payments domain knowledge is the main gap.',strengths:['API product experience highly relevant to payment infrastructure','Data analytics and A/B testing skills align with growth culture','8 years experience meets Senior/Lead bar'],gaps:['No direct payments / fintech domain experience','PCI-DSS compliance knowledge would be expected'],keywords:['payment gateway','API products','merchant success','transaction success rate','fintech'],headline:'Technical PM | API Products | 8 Yrs | B2B SaaS',apply_strategy:'Frame your API product work as the transferable skill — payments is learnable, platform thinking is not.',interview_q:['How would you improve payment success rates for merchants with high cart abandon?','Walk me through how you\'ve managed API-first product development','How do you balance developer experience vs merchant business needs?']},
+  {id:'demo-3',title:'AI Product Manager — GenAI Features',company:'Mastercard',location:'Pune, India',url:'https://careers.mastercard.com',source:'LinkedIn/Indeed',boardId:'jsearch',dataType:'api',salary:'₹45L–70L/yr',posted:new Date(Date.now()-1*86400000),score:82,breakdown:{skills:30,experience:21,domain:17,achievements:14},verdict:'DIRECT FIT',why:'GenAI product experience and B2B background are precisely what Mastercard\'s AI labs require for their intelligent decisioning platform.',strengths:['GenAI / RAG experience directly matches the role mandate','Strong achievement metrics (ARR growth, churn reduction) match Mastercard\'s ROI culture','Senior level matches the grade'],gaps:['Financial services regulatory knowledge (PCI, GDPR) expected'],keywords:['GenAI','intelligent decisioning','AI governance','enterprise AI','responsible AI'],headline:'GenAI Product Manager | RAG & Agents | 8 Yrs | B2B',apply_strategy:'Open with your RAG pipeline achievement — Mastercard is building LLM-powered risk decisioning and needs exactly this.',interview_q:['How have you managed responsible AI / bias considerations in shipped products?','Describe your approach to building internal AI tools vs customer-facing ones','How do you measure quality of GenAI outputs in production?']},
+  {id:'demo-4',title:'Product Manager — Growth',company:'Zepto',location:'Mumbai, India',url:'https://zepto.com/careers',source:'LinkedIn/Indeed',boardId:'jsearch',dataType:'api',salary:'₹25L–38L/yr',posted:new Date(Date.now()-7*86400000),score:44,breakdown:{skills:18,experience:14,domain:7,achievements:5},verdict:'STRETCH',why:'Consumer quick-commerce is a very different motion from B2B SaaS — growth tactics, customer psychology, and velocity expectations differ significantly.',strengths:['Product-led growth experience is transferable','A/B testing and analytics skills are valued'],gaps:['No consumer/D2C product experience','Quick-commerce logistics domain is highly specialised','Seniority mismatch — role is likely IC2/IC3, you are IC4/IC5'],keywords:['consumer growth','D2C','retention','funnel optimisation','cohort analysis'],headline:'Growth PM | Data-Driven | 8 Yrs | SaaS to Consumer Pivot',apply_strategy:'Only apply if you genuinely want a consumer product pivot. Frame it as intentional career transition, not a fallback.',interview_q:['Why consumer now after 8 years in B2B?','How would you improve Zepto\'s repeat order rate by 20%?','How do you approach product decisions with very short feedback cycles (hours, not weeks)?']},
+  {id:'demo-5',title:'Product Manager — Collaboration Platform',company:'Cisco',location:'Bangalore, India',url:'https://jobs.cisco.com',source:'LinkedIn/Indeed',boardId:'jsearch',dataType:'api',salary:'₹30L–45L/yr',posted:new Date(Date.now()-12*86400000),score:22,breakdown:{skills:9,experience:7,domain:4,achievements:2},verdict:'AVOID',why:'Role requires deep collaboration tools experience (Webex ecosystem) and enterprise IT infrastructure background — significantly different from AI product management.',strengths:['B2B enterprise experience is tangentially relevant'],gaps:['No collaboration / UC platform experience','Cisco moves on 12-18 month product cycles — very slow for your profile','Requires Webex + PSTN + Cisco hardware product knowledge'],keywords:['Webex','collaboration','enterprise communications','UCaaS'],headline:'',apply_strategy:'Skip this application. Your profile is a poor fit and your time is better invested in the 2 DIRECT FIT opportunities above.',interview_q:[]}
+];
+
+function runDemo(){
+  APP.isDemoMode=true;APP.profile=DEMO_PROFILE;APP.jobs=DEMO_JOBS;APP.apps=[];
+  $('topbar').style.display='flex';$('demo-banner').classList.add('on');
+  updatePill();
+  document.querySelectorAll('.pg').forEach(p=>p.classList.remove('on'));$('pg-results').classList.add('on');
+  $('topbar').style.display='flex';
+  // Populate stats
+  $('st-src').textContent='14';$('st-found').textContent=DEMO_JOBS.length;
+  $('st-strong').textContent=DEMO_JOBS.filter(j=>j.score>=75).length;
+  $('st-good').textContent=DEMO_JOBS.filter(j=>j.score>=50&&j.score<75).length;
+  $('st-tracked').textContent='0';
+  $('prog-box').style.display='none';
+  $('pill-txt').textContent='✓ Demo scan complete — 5 sample roles';
+  $('scan-pill').style.background='var(--green-l)';$('scan-pill').style.color='var(--green)';
+  $('scan-dot').style.animation='none';$('log-badge').className='log-badge lb-done';$('log-badge').textContent='DEMO';
+  // Add demo log entries
+  $('log-body').innerHTML=['Nutanix → 87/100 DIRECT FIT','Mastercard → 82/100 DIRECT FIT','Razorpay → 68/100 ADJACENT FIT','Zepto → 44/100 STRETCH','Cisco → 22/100 AVOID'].map(m=>`<div class="log-entry"><span class="log-ico">🎯</span><div><div class="log-co">Demo</div><div class="log-msg">${m}</div></div></div>`).join('');
+  renderFeed();
+  toast('Demo loaded! Explore the product. Click "Exit demo" to use your own resume.','success',5000);
+}
+function exitDemo(){
+  APP.isDemoMode=false;APP.jobs=[];APP.profile=null;
+  $('demo-banner').classList.remove('on');showPg('pg-setup');
+}
+
+/* ══ SETUP ══ */
+function saveSetup(){
+  const k=$('or-key').value.trim(),r=$('rapid-key').value.trim();
+  if(!k){$('setup-err').style.display='block';toast('OpenRouter key is required for AI features','error');return;}
+  $('setup-err').style.display='none';
+  APP.orKey=k;APP.rapidKey=r;
+  /* FIX: sync primaryModel FROM dropdown — this was the critical bug */
+  APP.primaryModel=$('ai-model').value||MODEL_PRIMARY;
+  APP.batchModel=MODEL_BATCH;
+  localStorage.setItem('jp2_or',k);
+  if(r)localStorage.setItem('jp2_rapid',r);
+  localStorage.setItem('jp2_primary',APP.primaryModel);
+  localStorage.setItem('jp2_batch',APP.batchModel);
+  $('topbar').style.display='flex';updatePill();
+  toast('Saved! Launching JobPilot with '+APP.primaryModel,'success');
+  setTimeout(()=>showPg('pg-upload'),700);
+}
+function toggleEye(id){const i=$(id);i.type=i.type==='password'?'text':'password';}
+
+/* ══ NAV ══ */
+function showPg(id){
+  document.querySelectorAll('.pg').forEach(p=>p.classList.remove('on'));$(id).classList.add('on');
+  $('topbar').style.display=['pg-setup','pg-extract'].includes(id)?'none':'flex';
+}
+function openModal(id){$(id).classList.add('on');if(id==='m-settings')populateSettings();}
+function closeModal(id){$(id).classList.remove('on');}
+
+/* ══ SUGGESTIONS ══ */
+function showSug(type){
+  const inp=$(type==='loc'?'p-loc':'p-role'),box=$(`sug-${type}`),list=type==='loc'?LOCS:ROLES;
+  const val=inp.value.toLowerCase();
+  const hits=val?list.filter(s=>s.toLowerCase().includes(val)):list;
+  if(!hits.length){box.classList.remove('on');return;}
+  box.innerHTML=hits.slice(0,6).map(s=>`<div class="sug-item" onmousedown="pickSug('${type}','${s}')">${s}</div>`).join('');
+  box.classList.add('on');
+}
+function hideSug(type,d){setTimeout(()=>$(`sug-${type}`).classList.remove('on'),d);}
+function pickSug(type,val){$(type==='loc'?'p-loc':'p-role').value=val;$(`sug-${type}`).classList.remove('on');}
+
+/* ══ FILE HANDLING ══ */
+let _file=null;
+function handleFile(f){
+  if(!f)return;_file=f;
+  $('drop-ico').textContent='✅';$('drop-t').textContent=f.name;
+  $('drop-s').textContent='Ready · '+Math.round(f.size/1024)+'KB';
+  $('drop-zone').style.borderColor='var(--green)';$('drop-zone').style.background='var(--green-l)';
+}
+function clearResume(){
+  _file=null;APP.resumeText='';$('paste-txt').value='';$('resume-saved-bar').style.display='none';
+  $('drop-ico').textContent='📄';$('drop-t').textContent='Drop your resume here';$('drop-s').textContent='PDF or DOCX · click to browse';
+  $('drop-zone').style.borderColor='';$('drop-zone').style.background='';
+  localStorage.removeItem('jp2_resume');
+}
+const dz=$('drop-zone');
+dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('drag');});
+dz.addEventListener('dragleave',()=>dz.classList.remove('drag'));
+dz.addEventListener('drop',e=>{e.preventDefault();dz.classList.remove('drag');handleFile(e.dataTransfer.files[0]);});
+async function extractFileText(f){
+  const ext=f.name.split('.').pop().toLowerCase();
+  if(ext==='pdf'){const ab=await f.arrayBuffer();const pdf=await pdfjsLib.getDocument({data:ab}).promise;let t='';for(let i=1;i<=pdf.numPages;i++){const pg=await pdf.getPage(i);const tc=await pg.getTextContent();t+=tc.items.map(x=>x.str).join(' ')+'\n';}return t;}
+  if(ext==='docx'){const ab=await f.arrayBuffer();const r=await mammoth.extractRawText({arrayBuffer:ab});return r.value;}
+  throw new Error('Use PDF or DOCX');
+}
+
+/* ══════════════════════════════════════════════════════
+   AI CALL — 3-TIER MODEL ROUTING
+   tier='primary' → Qwen3.7-Max  (complex reasoning tasks)
+   tier='batch'   → DeepSeek V4  (bulk scoring, extraction)
+   tier='local'   → Self-hosted  (privacy-sensitive, Ollama)
+══════════════════════════════════════════════════════ */
+function getModelCfg(tier){
+  if(tier==='local'&&APP.useLocal&&APP.localEndpoint){
+    return{endpoint:APP.localEndpoint.replace(/\/$/,'')+'/v1/chat/completions',model:APP.localModel,key:'ollama'};
+  }
+  if(tier==='batch'){
+    /* Use batch model; fallback to gpt-4o-mini if batch fails */
+    const bm=APP.batchModel||MODEL_BATCH;
+    return{endpoint:'https://openrouter.ai/api/v1/chat/completions',model:bm,key:APP.orKey,fallback:'openai/gpt-4o-mini'};
+  }
+  /* primary — with Qwen fallback */
+  return{endpoint:'https://openrouter.ai/api/v1/chat/completions',model:APP.primaryModel||MODEL_PRIMARY,key:APP.orKey};
+}
+
+async function ai(sys,usr,tier='primary',tries=2){
+  /* ── HOSTED MODE: use server-side proxy — no user key needed ── */
+  if(HOSTED&&API_AI){
+    for(let i=0;i<=tries;i++){
+      try{
+        const r=await fetch(API_AI,{
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({sys,usr,tier})
+        });
+        if(r.status===429){await new Promise(r=>setTimeout(r,2000));continue;}
+        const d=await r.json();
+        if(d.error)throw new Error(d.error);
+        return d.content||'';
+      }catch(e){
+        if(i===tries)throw e;
+        await new Promise(r=>setTimeout(r,800*(i+1)));
+      }
+    }
+  }
+
+  const cfg=getModelCfg(tier);
+  /* ── LOCAL MODE: direct OpenRouter with user's key ──
+     SMART FALLBACK CHAIN:
+     batch   → deepseek/deepseek-chat → gpt-4o-mini
+     primary → qwen/qwq-32b          → gpt-4o-mini
+     Both fall through to gpt-4o-mini on any model error */
+  const tryModel=async(model)=>{
+    const r=await fetch(cfg.endpoint,{
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+cfg.key,'HTTP-Referer':window.location.origin,'X-Title':'JobPilot'},
+      body:JSON.stringify({model,messages:[{role:'system',content:sys},{role:'user',content:usr}],temperature:0.15})
+    });
+    const d=await r.json();
+    if(d.error)throw new Error(d.error.message||'Model error: '+model);
+    return d.choices?.[0]?.message?.content||'';
+  };
+  for(let i=0;i<=tries;i++){
+    try{
+      return await tryModel(cfg.model);
+    }catch(e){
+      const errMsg=e.message||'';
+      const isModelErr=errMsg.includes('not a valid model')||errMsg.includes('model_not_found')||errMsg.includes('No endpoints');
+      /* On model error: immediately fall back to gpt-4o-mini (don't retry bad model) */
+      if(isModelErr){
+        try{
+          const t=await tryModel(MODEL_FALLBACK);
+          if(cfg.model!==MODEL_FALLBACK)console.warn(`[JobPilot] ${cfg.model} unavailable, used ${MODEL_FALLBACK}`);
+          return t;
+        }catch(fe){throw fe;}
+      }
+      if(i===tries)throw e;
+      await new Promise(r=>setTimeout(r,800*(i+1)));
+    }
+  }
+}
+function pJ(t){const c=t.replace(/```json|```/g,'').trim();const m=c.match(/[\[{][\s\S]*[\]}]/);if(!m)throw new Error('No JSON');return JSON.parse(m[0]);}
+
+/* ══ START ══ */
+async function handleStart(){
+  const paste=$('paste-txt').value.trim(),loc=$('p-loc').value.trim(),role=$('p-role').value.trim();
+  if(!_file&&!paste&&!APP.resumeText){toast('Please upload your resume or paste resume text','warning');return;}
+  if(!loc){toast('Please enter your target city or select Remote','warning');return;}
+  if(!role){toast('Please enter the role you are targeting','warning');return;}
+  showPg('pg-extract');setEx('ex1','act');
+  try{
+    if(_file||paste)APP.resumeText=_file?await extractFileText(_file):paste;
+    setEx('ex1','done');setEx('ex2','act');
+    await extractProfile();
+    setEx('ex2','done');setEx('ex3','act');
+    await generateQueries();
+    setEx('ex3','done');
+    populateProfile();showPg('pg-profile');save();
+  }catch(e){toast('Error: '+e.message,'error',5000);showPg('pg-upload');}
+}
+function setEx(id,st){
+  const el=$(id);el.className='exs '+st;const d=el.querySelector('.exs-dot');
+  d.textContent=st==='done'?'✓':st==='act'?'…':el.dataset.num||'';
+}
+
+/* ══════════════════════════════════════════════════════
+   ★ META-PROMPT 1: PROFILE EXTRACTION — Production Grade
+   ──────────────────────────────────────────────────────
+   Meta-prompting principles applied:
+   1. EXPERT PERSONA with specific domain (ATS engineer)
+   2. EXPLICIT EXTRACTION RULES for each field
+   3. QUALITY GATE inside the prompt (self-validation)
+   4. IMPLICIT SKILL INFERENCE (not just stated skills)
+   5. INDIA-AWARE: domain signals (FAANG, IIT, Series-B)
+   6. UNIQUE VALUE: specific, not generic
+══════════════════════════════════════════════════════ */
+async function extractProfile(){
+  const SYS=`You are a senior ATS engineer and career strategist with 15+ years at India's top recruiting firms (Naukri, LinkedIn India, Korn Ferry). You have parsed 500,000+ Indian tech resumes. Your extractions power precision job-matching for PM, engineering, and leadership roles. You understand India-specific signals: IIT/IIM brand weight, FAANG alumni status, Series-A/B startup experience, domain acronyms like BFSI, FMCG, SaaS. Over-extraction is always better than under-extraction.`;
+
+  const USR=`Extract a complete professional profile from this resume. Think step-by-step before returning.
+
+═══ EXTRACTION RULES ═══
+1. SKILLS: Extract BOTH explicit (named in resume) AND implicit (demonstrated by work described). Minimum 12. Include: technical tools, methodologies, domain knowledge, soft skills evidenced by achievements.
+2. ACHIEVEMENTS: ONLY include ones with numbers, %, INR/USD amounts, team size, scale (users, transactions, etc). If close to quantified ("led a large team"), infer with "~". Minimum 3.
+3. YEARS: Total professional years from first non-internship role to today. Internships = 0.5yr each.
+4. TARGET_ROLE: The logical NEXT role given trajectory — not a copy of objective section.
+5. SENIORITY: junior(0-2yr)|mid(3-5yr)|senior(6-9yr)|staff(10-14yr)|principal/director(15+yr)
+6. DOMAIN: Primary industry vertical (B2B SaaS, FinTech, HealthTech, E-commerce, Enterprise IT, etc.)
+7. UNIQUE_VALUE: 1 crisp sentence — what ONE thing makes this person memorable vs 100 similar candidates? Must be specific. "15 years of PM experience" is NOT unique value. "Shipped RAG-based AI that reduced support tickets by 40% at GE HealthCare scale" IS unique value.
+8. CURRENT_COMPANY: Most recent employer, or "Freelance" / "Between roles" if applicable.
+
+═══ QUALITY GATE — verify before returning ═══
+✓ skills has ≥ 10 items (add implicit skills if below threshold)
+✓ achievements has ≥ 2 items with actual numbers in them
+✓ years is a positive integer (if unclear, estimate from education year)
+✓ unique_value is specific and wouldn't apply to 50 other people
+
+Resume text:
+${APP.resumeText.slice(0,5500)}
+
+Return ONLY valid JSON — no markdown, no explanation text:
+{"name":"","email":"","phone":"","current_role":"","current_company":"","years":0,"target_role":"","domain":"","seniority":"","skills":[],"achievements":[],"education":"","unique_value":""}`;
+
+  APP.profile=pJ(await ai(SYS,USR,'primary'));
+}
+
+/* ══════════════════════════════════════════════════════
+   ★ META-PROMPT 2: SMART QUERY GENERATION — India-tuned
+   ──────────────────────────────────────────────────────
+   Meta-prompting principles applied:
+   1. INDIA MARKET AWARENESS: query variants for Indian PM titles
+   2. SENIORITY-AWARE: senior queries vs general queries
+   3. SKILL-ANCHORED: includes top 2 differentiating skills
+   4. DIVERSITY: 3 queries cover different title variants
+   5. API-OPTIMISED: ≤6 words per query (JSearch sweet spot)
+══════════════════════════════════════════════════════ */
+async function generateQueries(){
+  const p=APP.profile,loc=$('p-loc').value,role=$('p-role').value;
+  const SYS=`You are a job search expert who understands how Indian job boards (LinkedIn India, Naukri, Indeed India) surface listings. Indian PM roles have specific title conventions. Queries must be short (≤6 words) and specific to surface quality results, not noise.`;
+
+  const USR=`Generate exactly 3 optimised JSearch API queries for this candidate.
+
+CANDIDATE PROFILE:
+Target role: ${role} | Seniority: ${p.seniority} | Years: ${p.years}
+Domain: ${p.domain} | Top skills: ${(p.skills||[]).slice(0,5).join(', ')}
+
+INDIA MARKET CONTEXT:
+- Senior/Staff candidates: include "Senior" or domain qualifier (e.g. "AI Product Manager")
+- Indian startups often write "Product Manager" not "PM"
+- MNCs write "Product Manager II" or "Senior Product Manager"
+- AI/tech roles: include "Technical PM" or "AI PM" or "Platform PM" as variants
+
+QUERY RULES:
+1. Query 1: User's exact target role + most differentiating skill keyword
+2. Query 2: Alternate role title variant (e.g. "Technical Product Manager" vs "AI Platform PM")
+3. Query 3: Broader senior variant (e.g. "Senior PM" or "Lead Product Manager" or "Product Lead")
+4. NO location in query — location handled by API parameter
+5. MAX 6 words per query
+
+Return ONLY: {"queries":["q1","q2","q3"]}`;
+
+  try{
+    const r=pJ(await ai(SYS,USR,'batch'));
+    APP.queries=(r.queries||[]).filter(q=>q&&q.length>2).slice(0,3);
+    if(APP.queries.length<2)APP.queries=[role,'Senior '+role,'Technical '+role];
+  }catch(e){
+    APP.queries=[role,'Senior '+role.replace('Senior ',''),'Technical '+role.replace('Technical ','')];
+  }
+  log('Query Engine','info',`Queries: ${APP.queries.join(' | ')}`);
+}
+
+function populateProfile(){
+  const p=APP.profile;
+  $('pf-name').textContent=p.name||'—';$('pf-role').textContent=p.current_role||'—';
+  $('pf-yrs').textContent=(p.years||0)+' years total';$('pf-sen').textContent=p.seniority||'—';
+  $('pf-target').textContent=p.target_role||'—';$('pf-domain').textContent=p.domain||'—';
+  $('pf-ach').value=(p.achievements||[]).join('\n');
+  renderSkillChips();
+  if(p.unique_value){$('uvp-box').style.display='block';$('pf-uvp').textContent=p.unique_value;}
+}
+function renderSkillChips(){
+  const skills=APP.profile?.skills||[];
+  $('pf-skills').innerHTML=skills.map((s,i)=>
+    `<span class="chip">${s}<span class="chip-remove" onclick="removeSkill(${i})">×</span></span>`
+  ).join('');
+}
+function removeSkill(i){if(APP.profile?.skills){APP.profile.skills.splice(i,1);renderSkillChips();}  }
+function addSkill(){
+  const inp=$('skill-inp');const v=inp.value.trim();
+  if(!v)return;
+  if(!APP.profile)APP.profile={skills:[]};
+  if(!APP.profile.skills)APP.profile.skills=[];
+  if(!APP.profile.skills.includes(v)){APP.profile.skills.push(v);renderSkillChips();}
+  inp.value='';inp.focus();
+}
+
+/* ══ SCAN ENGINE ══ */
+/* ═══════════════════════════════════════════════════════
+   PRODUCTION-GRADE SCAN ENGINE
+   ★ Meta-prompting principles applied:
+   - Job deduplication by URL (no duplicate scoring)
+   - Batch concurrency control (MAX_PARALLEL_SCORE)
+   - Strict role relevance filter (ROLE_MATCH_TERMS)
+   - Skeleton loaders during discovery
+   - Phase indicator per company
+   - Silent 404s (no red errors for expected failures)
+   - Auto-save after each batch
+═══════════════════════════════════════════════════════ */
+const _seenURLs=new Set();/* Deduplication registry */
+
+function showSkeletons(n=3){
+  $('skel-list').innerHTML=Array(n).fill(0).map(()=>`
+    <div class="skel-card"><div style="display:flex;gap:10px">
+      <div class="skel-score skeleton"></div>
+      <div style="flex:1"><div class="skel-line skel-long skeleton"></div><div class="skel-line skel-med skeleton"></div><div class="skel-line skel-short skeleton"></div></div>
+    </div></div>`).join('');
+}
+function hideSkeletons(){$('skel-list').innerHTML='';}
+
+function setPhase(name,status){
+  const id='phase-'+name.replace(/\s/g,'-');
+  let el=document.getElementById(id);
+  if(!el){el=document.createElement('span');el.id=id;el.className='phase-step';el.textContent=name;$('phase-steps').appendChild(el);}
+  el.className='phase-step '+(status==='running'?'running':status==='done'?'done':status==='error'?'error':'');
+}
+
+async function beginScan(){
+  APP.jobs=[];APP.done=0;APP.filter='all';APP.src='all';APP.openJob=null;
+  _seenURLs.clear();
+  $('job-list').innerHTML='';$('skel-list').innerHTML='';
+  $('empty-feed').style.display='none';
+  $('log-body').innerHTML='';$('prog-box').style.display='block';
+  $('phase-steps').innerHTML='';$('phase-bar').classList.add('on');
+  document.querySelectorAll('.fb').forEach(b=>b.classList.remove('on'));
+  $('f-all').classList.add('on');$('s-all').classList.add('on');
+  $('st-src').textContent=TOTAL_SRCS;
+  showSkeletons(4);
+  showPg('pg-results');
+  const loc=$('p-loc').value,role=$('p-role').value;
+
+  /* ── PHASE 1: Company boards in parallel batches of 3 ── */
+  $('pill-txt').textContent='Phase 1/2 — Company boards…';
+  $('p-lbl').textContent='Scanning company boards…';
+  GH_COS.forEach(co=>setPhase(co.name,''));
+  for(let i=0;i<GH_COS.length;i+=3){
+    const batch=GH_COS.slice(i,i+3);
+    await Promise.all(batch.map(co=>runGreenhouse(co,role,loc)));
+    if(i+3<GH_COS.length)await new Promise(r=>setTimeout(r,200));
+  }
+
+  /* ── PHASE 2: JSearch queries (sequential to respect rate limits) ── */
+  if(APP.rapidKey){
+    $('pill-txt').textContent='Phase 2/2 — LinkedIn · Indeed · Glassdoor…';
+    $('p-lbl').textContent='Querying LinkedIn/Indeed/Glassdoor…';
+    setPhase('LinkedIn/Indeed','');setPhase('Glassdoor','');
+    for(const q of APP.queries){
+      await runJSearch(q,loc);
+      await new Promise(r=>setTimeout(r,300));
+    }
+  } else {
+    log('JSearch','info','No RapidAPI key — only company boards loaded. Add key for LinkedIn/Indeed.');
+    APP.done+=JSEARCH_QUERIES;updateStats();
+  }
+
+  /* ── DONE ── */
+  hideSkeletons();
+  $('phase-bar').classList.remove('on');
+  $('prog-box').style.display='none';
+  $('pill-txt').textContent=`✓ Scan complete — ${APP.jobs.length} matched role${APP.jobs.length!==1?'s':''}`;
+  $('scan-pill').style.background='var(--green-l)';$('scan-pill').style.color='var(--green)';
+  $('scan-dot').style.animation='none';
+  $('log-badge').className='log-badge lb-done';$('log-badge').textContent='DONE';
+  if(APP.jobs.length===0)$('empty-feed').style.display='block';
+  renderFeed();save();
+  toast(`Found ${APP.jobs.length} matching roles for "${role}" in ${loc}`,'success',4000);
+}
+function log(co,status,msg){
+  const ico={info:'ℹ',found:'🟢',none:'⚪',scoring:'◎',strong:'🎯',good:'✅',weak:'🟡',error:'⚠',scanning:'⟳',skip:'·'}[status]||'·';
+  const d=document.createElement('div');d.className='log-entry';
+  d.innerHTML=`<span class="log-ico">${ico}</span><div><div class="log-co">${co}</div><div class="log-msg">${msg}</div></div>`;
+  const lb=$('log-body');lb.prepend(d);
+  /* Keep log to 40 entries max for performance */
+  while(lb.children.length>40)lb.removeChild(lb.lastChild);
+}
+function updateStats(){
+  const s=APP.jobs.filter(j=>j.score>=75).length,g=APP.jobs.filter(j=>j.score>=50&&j.score<75).length;
+  $('st-found').textContent=APP.jobs.length;$('st-strong').textContent=s;
+  $('st-good').textContent=g;$('st-tracked').textContent=APP.apps.length;
+  const pct=Math.min(100,Math.round((APP.done/TOTAL_SRCS)*100));
+  $('prog-fill').style.width=pct+'%';$('prog-pct').textContent=pct+'%';
+}
+
+/* ══ JOB RELEVANCE CHECK ══
+   Hard filter before expensive AI scoring.
+   Uses ROLE_MATCH_TERMS + ROLE_EXCLUDE_TERMS constants.
+══ */
+function isJobRelevant(title,userRole){
+  const t=title.toLowerCase();
+  const r=userRole.toLowerCase();
+  /* Must either match user's role terms OR a standard PM/leadership term */
+  const userTerms=r.split(' ').filter(w=>w.length>3);
+  const matchesUser=userTerms.some(k=>t.includes(k));
+  const matchesPM=ROLE_MATCH_TERMS.some(k=>t.includes(k));
+  const excluded=ROLE_EXCLUDE_TERMS.some(k=>t.includes(k));
+  return(matchesUser||matchesPM)&&!excluded;
+}
+
+/* ══ JSEARCH — Legal licensed aggregator (LinkedIn/Indeed/Glassdoor) ══ */
+async function runJSearch(query,loc){
+  setPhase('LinkedIn/Indeed','running');
+  log('JSearch','scanning',`"${query}" in ${loc}`);
+  try{
+    let jobs=[];
+    if(HOSTED&&API_SEARCH){
+      /* ── Hosted mode: server-side proxy ── */
+      const r=await fetch(API_SEARCH,{
+        method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({query,location:loc})
+      });
+      if(r.status===429){toast('Search rate limit — please wait','warning');await new Promise(r=>setTimeout(r,2000));}
+      const d=await r.json();
+      jobs=d.jobs||[];
+    } else if(APP.rapidKey){
+      /* ── Local mode: direct RapidAPI call ── */
+      const url=`https://jsearch.p.rapidapi.com/search?`+
+        `query=${encodeURIComponent(query+' '+loc+' India')}&num_pages=2&date_posted=month&country=in`;
+      const r=await fetch(url,{headers:{'X-RapidAPI-Key':APP.rapidKey,'X-RapidAPI-Host':'jsearch.p.rapidapi.com'}});
+      if(r.status===429){toast('JSearch rate limit hit — slowing down…','warning');await new Promise(r=>setTimeout(r,2000));}
+      if(!r.ok)throw new Error('JSearch HTTP '+r.status);
+      const d=await r.json();jobs=d.data||[];
+    } else {
+      APP.done++;updateStats();return;/* No key, no proxy — skip gracefully */
+    }
+    const relevant=jobs.filter(j=>isJobRelevant(j.job_title||'',query)).slice(0,6);
+    log('JSearch','found',`${relevant.length}/${jobs.length} relevant for "${query}"`);
+    for(let i=0;i<relevant.length;i+=MAX_PARALLEL_SCORE){
+      await Promise.all(relevant.slice(i,i+MAX_PARALLEL_SCORE).map(j=>addScoredJob(normalizeJSearch(j))));
+      if(i+MAX_PARALLEL_SCORE<relevant.length)await new Promise(r=>setTimeout(r,400));
+    }
+    setPhase('LinkedIn/Indeed','done');
+  }catch(e){
+    log('JSearch','error',e.message.slice(0,55));
+    setPhase('LinkedIn/Indeed','error');
+  }
+  APP.done++;updateStats();
+}
+function normalizeJSearch(j){
+  const desc=[(j.job_description||'').slice(0,2000),(j.job_highlights?.Qualifications||[]).join('\n'),(j.job_highlights?.Responsibilities||[]).slice(0,5).join('\n')].join('\n').trim();
+  return{
+    id:'js-'+j.job_id,
+    title:j.job_title||'Role',company:j.employer_name||'Company',
+    location:[j.job_city,j.job_state].filter(Boolean).join(', ')||j.job_country||'India',
+    url:j.job_apply_link||'#',description:desc,
+    source:j.job_publisher||'LinkedIn/Indeed',boardId:'jsearch',dataType:'api',
+    salary:fmtSalary(j.job_min_salary,j.job_max_salary,j.job_salary_currency,j.job_salary_period),
+    posted:j.job_posted_at_datetime_utc?new Date(j.job_posted_at_datetime_utc):null,
+    isRemote:j.job_is_remote||false,
+  };
+}
+
+/* ══ GREENHOUSE — Direct verified company boards ══ */
+async function runGreenhouse(co,role,loc){
+  setPhase(co.name,'running');
+  try{
+    const r=await fetch(`https://boards-api.greenhouse.io/v1/boards/${co.slug}/jobs?content=true`,{signal:AbortSignal.timeout(8000)});
+    if(!r.ok){setPhase(co.name,'error');APP.done++;updateStats();return;}/* Silent 404 — no red error in log */
+    const d=await r.json();
+    const locCity=loc.toLowerCase().split(' ')[0];
+    const filtered=(d.jobs||[]).filter(j=>{
+      const jl=(j.location?.name||'').toLowerCase();
+      const jt=j.title;
+      const locOk=jl.includes('india')||jl.includes('remote')||jl.includes(locCity)||jl.includes('apj')||jl.includes('apac');
+      return locOk&&isJobRelevant(jt,role);
+    }).slice(0,3);
+    if(filtered.length>0){
+      log(co.name,'found',`${filtered.length} role${filtered.length>1?'s':''}: ${filtered.map(j=>j.title).join(', ').slice(0,60)}`);
+      for(const j of filtered)await addScoredJob(normalizeGH(j,co));
+      setPhase(co.name,'done');
+    } else {
+      setPhase(co.name,'done');/* Done but no matching roles — quiet */
+    }
+  }catch(e){setPhase(co.name,'error');}/* Timeout/network errors silent */
+  APP.done++;updateStats();
+}
+function normalizeGH(j,co){
+  return{
+    id:'gh-'+j.id,title:j.title,company:co.name,
+    location:j.location?.name||'India',url:j.absolute_url||'#',
+    description:(j.content||'').replace(/<[^>]+>/g,' ').replace(/\s{2,}/g,' ').slice(0,2800),
+    source:'Greenhouse',boardId:'greenhouse',dataType:'verified',
+    salary:null,posted:j.updated_at?new Date(j.updated_at):null,isRemote:false,
+  };
+}
+
+/* ══════════════════════════════════════════════════════
+   ★ META-PROMPT 3: JOB SCORING — Chain-of-Thought + 4-Class
+   ──────────────────────────────────────────────────────
+   Meta-prompting principles applied:
+   1. CHAIN-OF-THOUGHT: Think step-by-step before scoring
+      → Reduces hallucination, improves score consistency
+   2. INDIA MARKET CALIBRATION: Scores tuned for Indian PM market
+      → LPA salary norms, company tier expectations
+   3. STRUCTURED RUBRIC: 4 explicit dimensions, not a vibe check
+   4. ANTI-INFLATION: Explicit "do not inflate" rules with examples
+   5. OUTPUT CONTRACT: Exact JSON schema, no markdown possible
+   6. BATCH MODEL: Uses DeepSeek/fallback for cost efficiency
+══════════════════════════════════════════════════════ */
+async function scoreJob(job){
+  const p=APP.profile;
+  const SYS=`You are an elite ATS scoring system and senior hiring manager for India's top tech companies. You have reviewed 200,000+ job applications in the Indian PM/Tech market. You understand Indian tech company cultures (Tier-1 MNC, late-stage startup, early-stage startup) and their different expectations. Your calibration is trusted by thousands of job seekers. An inflated score is worse than no score — it wastes the candidate's most valuable resource: time.`;
+
+  const USR=`TASK: Score this candidate-job fit with precision and honesty.
+
+STEP 1 — UNDERSTAND THE JOB (read carefully):
+Company: ${job.company} | Role: ${job.title} | Location: ${job.location}
+JD Summary: ${(job.description||'').slice(0,1400)}
+
+STEP 2 — ASSESS THE CANDIDATE:
+Name: ${p.name} | Seniority: ${p.seniority} | Experience: ${p.years} yrs
+Domain: ${p.domain} | Current: ${p.current_role} @ ${p.current_company||'—'}
+Skills: ${(p.skills||[]).slice(0,12).join(', ')}
+Quantified wins: ${(p.achievements||[]).slice(0,3).join(' | ')}
+Unique value: ${p.unique_value||'—'}
+
+STEP 3 — SCORE ON 4 DIMENSIONS (100 pts total):
+• Skills Match (0-35): What % of JD's required+preferred skills does the candidate have?
+• Experience Level (0-25): Does their seniority, scope, and years match expectations?
+• Domain Relevance (0-20): Is their industry background directly applicable?
+• Achievement Quality (0-20): Do their past quantified wins predict success here?
+
+STEP 4 — CLASSIFY:
+DIRECT FIT   [75-100] → Candidate meets ≥70% of requirements. HM would shortlist.
+ADJACENT FIT [50-74]  → Strong transferable experience. Good chance with tailored application.
+STRETCH      [25-49]  → Notable gaps. Strategically worthwhile only if role is a deliberate pivot.
+AVOID        [0-24]   → Fundamental mismatch. Candidate's time is better spent on better-fit roles.
+
+CALIBRATION (India PM market):
+- 7+ yr PM in B2B SaaS applying to Senior PM at Indian MNC = likely 75-85
+- 3 yr PM applying to Director = likely 30-45
+- SaaS PM applying to consumer startup = likely 45-60 (adjacent)
+- PM with no fintech applying to payments startup = likely 40-55
+
+ANTI-INFLATION RULE: When unsure between two classes, assign the lower one. AVOID means "not a good use of your time", not "you are bad". Honesty serves the candidate better than false hope.
+
+OUTPUT — Return ONLY this JSON (no markdown, no extra text):
+{"score":0,"breakdown":{"skills":0,"experience":0,"domain":0,"achievements":0},"verdict":"DIRECT FIT","why":"one specific honest sentence about overall fit","strengths":["specific strength 1","specific strength 2","specific strength 3"],"gaps":["actionable gap 1","actionable gap 2"],"keywords":["exact JD phrase 1","exact JD phrase 2","exact JD phrase 3","exact JD phrase 4","exact JD phrase 5"],"headline":"≤10 word ATS headline for this role","apply_strategy":"one tactical sentence on how to position this application","interview_q":["STAR q tailored to this role","STAR q 2","STAR q 3"]}`;
+
+  /* BATCH model — with smart fallback to gpt-4o-mini if unavailable */
+  const raw=await ai(SYS,USR,'batch');
+  return pJ(raw);
+}
+
+async function addScoredJob(job){
+  /* DEDUPLICATION — skip if same URL already processed */
+  if(!job.url||job.url==='#'){job.url=`#${job.id}`;}
+  if(_seenURLs.has(job.url))return;
+  _seenURLs.add(job.url);
+  if(APP.jobs.some(j=>j.id===job.id))return;
+
+  log(job.company,'scoring',`Scoring: ${job.title.slice(0,40)}`);
+  try{
+    const sc=await scoreJob(job);
+    /* Validate score is a sensible number */
+    if(typeof sc.score!=='number'||sc.score<0||sc.score>100)sc.score=Math.max(0,Math.min(100,parseInt(sc.score)||35));
+    const full={...job,...sc};
+    APP.jobs.push(full);
+    APP.jobs.sort((a,b)=>(b.score||0)-(a.score||0));
+    const cls=sc.score>=75?'strong':sc.score>=50?'good':sc.score>=25?'weak':'skip';
+    log(job.company,cls,`${job.title.slice(0,30)} → ${sc.score}/100 ${sc.verdict||''}`);
+  }catch(e){
+    /* On scoring failure: show job with PENDING state instead of AVOID/0 */
+    APP.jobs.push({...job,score:null,verdict:'PENDING',why:'Score pending — click to retry',strengths:[],gaps:[],keywords:[],interview_q:[]});
+    log(job.company,'info',`${job.title.slice(0,30)} — queued`);
+  }
+  renderFeed();updateStats();
+  /* Auto-save every 3 jobs */
+  if(APP.jobs.length%3===0)save();
+}
+
+/* ══ FEED RENDER ══ */
+function setFilter(f){APP.filter=f;document.querySelectorAll('[id^="f-"]').forEach(b=>b.classList.remove('on'));$('f-'+f).classList.add('on');renderFeed();}
+function setSrc(s){APP.src=s;document.querySelectorAll('[id^="s-"]').forEach(b=>b.classList.remove('on'));$('s-'+s).classList.add('on');renderFeed();}
+function scCol(s){return s>=75?'var(--green)':s>=50?'var(--amber)':s>0?'var(--red)':'var(--ink3)';}
+function scBg(s){return s>=75?'var(--green-l)':s>=50?'var(--amber-l)':s>0?'var(--red-l)':'#f4f4f0';}
+function fmtSalary(mn,mx,cur,per){
+  if(!mn&&!mx)return null;
+  const f=n=>cur==='INR'?(n>=100000?`${(n/100000).toFixed(0)}L`:`${Math.round(n/1000)}K`):n.toLocaleString();
+  const sym=cur==='INR'?'₹':(cur||'$');
+  const p={'YEAR':'/yr','MONTH':'/mo','HOUR':'/hr'}[per]||'/yr';
+  if(mn&&mx)return`${sym}${f(mn)}–${f(mx)}${p}`;
+  return mn?`${sym}${f(mn)}+${p}`:null;
+}
+function daysAgo(d){if(!d)return null;const dd=Math.floor((Date.now()-new Date(d))/86400000);return dd===0?'Today':dd===1?'Yesterday':dd<7?`${dd}d ago`:dd<30?`${Math.floor(dd/7)}w ago`:`${Math.floor(dd/30)}mo ago`;}
+function renderFeed(){
+  const fl=APP.jobs.filter(j=>{
+    if(APP.filter==='strong'&&j.score<75)return false;
+    if(APP.filter==='good'&&(j.score<50||j.score>=75))return false;
+    if(APP.filter==='partial'&&j.score>=50)return false;
+    if(APP.src!=='all'&&j.boardId!==APP.src)return false;
+    return true;
+  });
+  $('feed-count').textContent=fl.length+' roles';
+  $('empty-feed').style.display=fl.length?'none':'block';
+  const free=APP.isPro||(APP.tailorsUsed<FREE_LIMIT);
+  $('job-list').innerHTML=fl.map(j=>{
+    const isO=j.id===APP.openJob,isT=APP.apps.some(a=>a.jobId===j.id);
+    /* 4-class + PENDING state */
+    const isPending=j.verdict==='PENDING'||j.score===null;
+    const score=isPending?'…':j.score;
+    const vmap=isPending
+      ?{label:'SCORING…',cls:'bdg-gray'}
+      :(VERDICT_MAP[j.verdict]||{label:j.score>=75?'DIRECT FIT':j.score>=50?'ADJACENT FIT':j.score>=25?'STRETCH':'AVOID',cls:j.score>=75?'bdg-green':j.score>=50?'bdg-amber':j.score>=25?'bdg-blue':'bdg-red'});
+    const ml=vmap.label,mc=vmap.cls;
+    const srcBdg=j.dataType==='verified'?'<span class="bdg bdg-verified">✓ VERIFIED</span>':'<span class="bdg bdg-aggregated">AGGREGATED</span>';
+    const bd=j.breakdown;
+    const posted=daysAgo(j.posted);
+    return`<div class="jcard${isO?' open':''}" id="jc-${j.id}" onclick="toggleCard('${j.id}')">
+<div class="jcard-top">
+  <div class="score-badge${isPending?' skeleton':''}" style="background:${isPending?'var(--card2)':scBg(j.score)}">
+    <span class="score-num" style="color:${isPending?'var(--ink3)':scCol(j.score)}">${isPending?'…':j.score}</span>
+    <span class="score-den" style="color:${isPending?'var(--ink3)':scCol(j.score)}">/100</span>
+  </div>
+  <div class="jcard-body">
+    <div class="jcard-title-row">
+      <span class="jtitle">${j.title}</span>
+      <span class="bdg ${mc}">${ml}</span>
+      ${srcBdg}<span class="bdg bdg-gray">${j.source}</span>
+    </div>
+    <div class="jcard-meta">
+      <b style="color:var(--ink)">${j.company}</b>·<span>${j.location}</span>
+      ${j.salary?`·<span class="jcard-salary">${j.salary}</span>`:''}
+      ${posted?`·<span>${posted}</span>`:''}
+      ${j.isRemote?'·<span style="color:var(--blue);font-weight:600">Remote</span>':''}
+    </div>
+    ${j.why?`<div class="jcard-why">${j.why}</div>`:''}
+    ${j.strengths?.length?`<div class="jcard-strengths">${j.strengths.slice(0,3).map(s=>`<span class="str-chip">✓ ${s.length>42?s.slice(0,42)+'…':s}</span>`).join('')}</div>`:''}
+  </div>
+  <div class="jcard-actions" onclick="event.stopPropagation()">
+    <button class="btn-tailor${free?'':' locked'}" onclick="openStudio('${j.id}')">${free?'✦ Tailor':'🔒 Upgrade'}</button>
+    <a class="btn-apply" href="${j.url}" target="_blank" rel="noopener noreferrer">Apply →</a>
+    <button class="btn-track" onclick="trackJob('${j.id}')">${isT?'Tracked ✓':'+ Track'}</button>
+  </div>
+</div>
+<div class="jcard-expand${isO?' on':''}" id="exp-${j.id}">
+  ${bd?`<div class="score-breakdown"><span class="sbd-pill">Skills ${bd.skills}/35</span><span class="sbd-pill">Exp ${bd.experience}/25</span><span class="sbd-pill">Domain ${bd.domain}/20</span><span class="sbd-pill">Wins ${bd.achievements}/20</span></div>`:''}
+  <div class="expand-grid">
+    <div class="exp-box" style="background:var(--green-l)"><div class="exp-box-title" style="color:var(--green)">Why you fit</div>${(j.strengths||[]).map(s=>`<div class="exp-item" style="color:var(--green)">• ${s}</div>`).join('')||'<div class="exp-item" style="color:var(--ink3)">–</div>'}</div>
+    <div class="exp-box" style="background:var(--amber-l)"><div class="exp-box-title" style="color:var(--amber)">Gaps to address</div>${(j.gaps||[]).map(g=>`<div class="exp-item" style="color:var(--amber)">• ${g}</div>`).join('')||'<div class="exp-item" style="color:var(--ink3)">None identified</div>'}</div>
+  </div>
+  ${j.apply_strategy?`<div class="strategy-box"><div class="strategy-title">💡 Application strategy</div><div class="strategy-text">${j.apply_strategy}</div></div>`:''}
+  ${j.headline?`<div class="headline-box"><div class="hl-label">ATS Power Headline</div><div class="hl-text">${j.headline}</div></div>`:''}
+  ${j.keywords?.length?`<div class="keywords-row"><div class="kw-label">Inject these into your resume for this JD</div><div class="kw-chips">${j.keywords.map(k=>`<span class="kw-chip">${k}</span>`).join('')}</div></div>`:''}
+  ${j.interview_q?.length?`<div><div class="iqs-label">Interview prep (STAR format)</div>${j.interview_q.map(q=>`<div class="iq">${q}</div>`).join('')}</div>`:''}
+</div>
+</div>`;
+  }).join('');
+}
+function toggleCard(id){APP.openJob=APP.openJob===id?null:id;renderFeed();}
+function trackJob(id){
+  if(APP.apps.some(a=>a.jobId===id))return;
+  const j=APP.jobs.find(j=>j.id===id);if(!j)return;
+  APP.apps.push({jobId:id,company:j.company,title:j.title,score:j.score,url:j.url,date:new Date().toLocaleDateString('en-IN'),status:'To Apply'});
+  $('st-tracked').textContent=APP.apps.length;renderFeed();save();
+}
+
+/* ══ STUDIO ══ */
+async function openStudio(id){
+  if(!APP.isPro&&APP.tailorsUsed>=FREE_LIMIT){openModal('m-upgrade');return;}
+  const job=APP.jobs.find(j=>j.id===id);if(!job)return;
+  APP.tailorJob=job;APP.tailored='';APP.cover='';APP.prep='';APP.currentTab='resume';
+  $('stab-resume').classList.add('on');$('stab-cover').classList.remove('on');$('stab-prep').classList.remove('on');
+  $('studio-for').textContent=`for ${job.company} — ${job.title}`;
+  $('studio-score').textContent=`Match: ${job.score}/100`;
+  $('orig-body').textContent=APP.resumeText.slice(0,8000);
+  $('orig-panel').style.display='';
+  $('studio-body').style.gridTemplateColumns='';
+  $('ai-panel-title').textContent='✦ AI-Tailored Resume';
+  $('ai-body').className='doc-body loading';$('ai-body').textContent='Generating tailored resume…';
+  showPg('pg-studio');
+  APP.tailored=await safeGen(()=>tailorResume(job),'Error generating tailored resume.');
+  $('ai-body').className='doc-body';$('ai-body').textContent=APP.tailored;
+  APP.tailorsUsed++;localStorage.setItem('jp2_used',APP.tailorsUsed);updatePill();
+}
+async function safeGen(fn,fallback){try{return await fn();}catch(e){return fallback+'\n\n'+e.message;}}
+function switchTab(tab){
+  APP.currentTab=tab;
+  ['resume','cover','prep'].forEach(t=>{$(`stab-${t}`).classList.toggle('on',t===tab);});
+  if(tab==='resume'){
+    $('orig-panel').style.display='';$('studio-body').style.gridTemplateColumns='';
+    $('ai-panel-title').textContent='✦ AI-Tailored Resume';
+    $('ai-body').className='doc-body';$('ai-body').textContent=APP.tailored||'Generate resume first from the job feed.';
+  } else {
+    $('orig-panel').style.display='none';$('studio-body').style.gridTemplateColumns='1fr';
+    if(tab==='cover'){
+      $('ai-panel-title').textContent='✦ AI Cover Letter';
+      if(!APP.cover){
+        $('ai-body').className='doc-body loading';$('ai-body').textContent='Generating cover letter…';
+        safeGen(()=>genCoverLetter(APP.tailorJob),'Error.').then(t=>{APP.cover=t;$('ai-body').className='doc-body';$('ai-body').textContent=t;});
+      } else{$('ai-body').className='doc-body';$('ai-body').textContent=APP.cover;}
+    } else {
+      $('ai-panel-title').textContent='✦ Interview Prep';
+      if(!APP.prep){
+        $('ai-body').className='doc-body loading';$('ai-body').textContent='Generating interview prep…';
+        safeGen(()=>genInterviewPrep(APP.tailorJob),'Error.').then(t=>{APP.prep=t;$('ai-body').className='doc-body';$('ai-body').textContent=t;});
+      } else{$('ai-body').className='doc-body';$('ai-body').textContent=APP.prep;}
+    }
+  }
+}
+
+/* ══════════════════════════════════════════════════════
+   ★ META-PROMPT 4A: FACT EXTRACTION (Anti-Fabrication Stage 1)
+   Model: DeepSeek V4 (batch) — fast extraction of ground truth
+   Extracts ONLY verifiable facts from the original resume.
+   Every resume bullet must trace back to one of these facts.
+   SYSTEM MUST NEVER FABRICATE RESUME CLAIMS.
+══════════════════════════════════════════════════════ */
+async function extractVerifiableFacts(resumeText){
+  const SYS=`You are a resume fact auditor. Your job is to extract ONLY verifiable facts from a resume — nothing invented, nothing inferred beyond what is stated. This fact list becomes the ground truth that constrains all resume rewriting. No bullet may be written that cannot be traced to one of these facts.`;
+  const USR=`Extract all verifiable facts from this resume. Be exhaustive.
+
+FACT CATEGORIES TO EXTRACT:
+1. ROLES: Every job title, company name, employment dates (exact or approximate)
+2. METRICS: Every number, percentage, dollar amount, team size, or scale indicator
+3. SKILLS: Every technology, tool, framework, methodology explicitly named
+4. PROJECTS: Every named project, product, or initiative with its stated outcome
+5. ACHIEVEMENTS: Every stated result — even if unquantified, record it as-is
+6. EDUCATION: Degrees, institutions, certifications, years
+7. DOMAIN SIGNALS: Industries, customer types, business models mentioned
+
+RULES:
+- Quote verbatim from the resume where possible
+- Mark approximate inferences with [INFERRED] tag
+- Do NOT add facts not present in the resume
+- Do NOT clean up or improve — capture exactly what's there
+
+Resume:
+${resumeText.slice(0,5000)}
+
+Return ONLY valid JSON:
+{"roles":[{"title":"","company":"","dates":"","location":""}],"metrics":[""],"skills":[""],"projects":[{"name":"","outcome":""}],"achievements":[""],"education":[""],"domain_signals":[""]}`;
+  return pJ(await ai(SYS,USR,'batch'));
+}
+
+/* ══════════════════════════════════════════════════════
+   ★ META-PROMPT 4B: RESUME TAILORING (Anti-Fabrication Stage 2)
+   Model: Qwen3.7-Max (primary) — elite resume rewriting
+   CONSTRAINT: Every bullet must cite a source fact from Stage 1.
+   FABRICATION IS PROHIBITED. Reframe only. Never invent.
+══════════════════════════════════════════════════════ */
+async function tailorResume(job){
+  /* Stage 1: Extract ground truth facts (cheap batch model) */
+  log('Studio','info','Extracting verifiable facts from resume…');
+  let facts;
+  try{facts=await extractVerifiableFacts(APP.resumeText);}
+  catch(e){facts=null;}/* if extraction fails, continue with constraint in main prompt */
+
+  const factSection=facts?`
+VERIFIED FACT INVENTORY (from original resume — use ONLY these as sources):
+Roles: ${(facts.roles||[]).map(r=>`${r.title} @ ${r.company} (${r.dates})`).join(' | ')}
+Metrics: ${(facts.metrics||[]).join(' · ')}
+Skills: ${(facts.skills||[]).join(', ')}
+Key Achievements: ${(facts.achievements||[]).slice(0,6).join(' | ')}
+Projects: ${(facts.projects||[]).map(p=>`${p.name}: ${p.outcome}`).join(' | ')}
+`:`ORIGINAL RESUME (use ONLY facts stated here — do not invent):
+${APP.resumeText.slice(0,3000)}`;
+
+  const SYS=`You are an elite executive resume writer and ATS specialist. Your resumes achieve 3× more interview callbacks. You have one absolute, non-negotiable rule: NEVER fabricate resume claims. Every bullet you write must be traceable to a fact from the candidate's original resume. Reframing is permitted. Inference with "~" is permitted. Invention is PROHIBITED.`;
+  const USR=`Rewrite this resume to maximise fit for the target job. Every claim must be traceable to the verified fact inventory below.
+
+═══ ANTI-FABRICATION CONTRACT ═══
+✓ PERMITTED: Reframe existing experience using JD language
+✓ PERMITTED: Add "~" estimates to unquantified facts (e.g. "~30% improvement")
+✓ PERMITTED: Reorder bullets to lead with most relevant experience
+✓ PERMITTED: Use exact JD keywords where they truthfully apply
+✗ PROHIBITED: Inventing experience, projects, or skills not in the fact inventory
+✗ PROHIBITED: Claiming metrics not derivable from stated facts
+✗ PROHIBITED: Adding responsibilities the candidate did not hold
+
+═══ TRANSFORMATION RULES ═══
+1. POWER HEADLINE: Line 1 must be the headline below — no exceptions
+2. OUTCOME-FIRST: Lead every bullet with RESULT → then action (not "Responsible for…")
+3. ATS KEYWORDS: Weave JD keywords naturally into bullets — never just append a list
+4. RELEVANCE CUT: Remove or deprioritise experience unrelated to this specific role
+5. QUANTIFY: Add "~" estimates where numbers are absent but inferable from context
+
+${factSection}
+
+TARGET ROLE: ${job.title} at ${job.company}
+KEY REQUIREMENTS: ${(job.description||'').slice(0,800)}
+GAPS TO ADDRESS: ${(job.gaps||[]).join('; ')||'None identified'}
+ATS KEYWORDS TO INJECT: ${(job.keywords||[]).join(', ')}
+POWER HEADLINE: ${job.headline||job.title+' | '+(APP.profile?.years||'')+'+ Years Experience'}
+
+Return ONLY the complete rewritten resume. Start with the power headline on line 1. No JSON, no markdown, no preamble — just the resume text ready to paste into a document.`;
+
+  /* Uses PRIMARY model (Qwen3.7-Max) — highest quality rewriting */
+  return ai(SYS,USR,'primary');
+}
+
+/* ══════════════════════════════════════════════════════
+   ★ META-PROMPT 5: COVER LETTER
+   3-paragraph hook-value-close. Under 280 words.
+   India-aware. Anti-cliché enforced.
+══════════════════════════════════════════════════════ */
+/* ══════════════════════════════════════════════════════
+   ★ META-PROMPT 5: COVER LETTER — India-aware, STAR-anchored
+   ──────────────────────────────────────────────────────
+   Meta-prompting principles:
+   1. COMPANY RESEARCH HOOK — forces specific P1 (not generic)
+   2. STAR STORY in P2 — Situation+Action+Result from real achievements
+   3. INDIA CORPORATE CULTURE — appropriate formality level
+   4. WORD COUNT TARGET — 220-250 words (India HRs read fast)
+   5. ANTI-CLICHÉ ENFORCEMENT — banned words list
+   6. STARTUP vs MNC TONE CALIBRATION — different voice
+   7. QUALITY TEST — self-check before returning
+══════════════════════════════════════════════════════ */
+async function genCoverLetter(job){
+  const p=APP.profile;
+  const isStartup=['razorpay','zepto','cred','meesho','groww','slice','jupiter','jar'].some(s=>job.company.toLowerCase().includes(s));
+  const SYS=`You are India's top executive cover letter writer. You've helped 10,000+ professionals land roles at Indian unicorns, MNCs, and global tech companies. You understand what Indian hiring managers actually read and respond to. Your letters are specific, confident, and human — never generic.`;
+
+  const USR=`Write a powerful cover letter. Think before writing.
+
+COMPANY: ${job.company} | ROLE: ${job.title}
+TONE: ${isStartup?'Startup-casual: direct, bold, shows product instinct':'Professional-confident: formal but warm, shows business acumen'}
+TARGET WORD COUNT: 220-250 words exactly (India HRs skim, every word must earn its place)
+
+STRUCTURE — 3 paragraphs:
+
+P1 — COMPANY HOOK (40-50 words):
+• Open with ONE specific, researched insight about ${job.company} — their recent product launch, market challenge, growth trajectory, or competitive position
+• NOT: "I am writing to apply for…" | NOT: "I am excited about…" | NOT: "I am passionate about…"
+• Must make the hiring manager think "this person actually knows us"
+
+P2 — STAR VALUE PROOF (100-120 words):
+• Share ONE quantified achievement using STAR format (brief Situation, Action, Result)
+• Connect it DIRECTLY to what ${job.company} needs based on the JD
+• Use their job description language naturally (mirrors = less filtered by ATS)
+• Second achievement as a supporting stat (1 sentence)
+
+P3 — CONFIDENT CLOSE (40-50 words):
+• Express specific interest in THIS company's mission (not generic "I want to grow")
+• Clear CTA: offer to discuss how you can contribute to [specific company goal]
+• BANNED close phrases: "I look forward to hearing", "Please find attached", "Thank you for your consideration"
+
+CANDIDATE:
+${p.name} | ${p.seniority} level | ${p.years} years | ${p.domain}
+Role score: ${job.score}/100 (${job.verdict}) for ${job.title} at ${job.company}
+Relevant strengths: ${(job.strengths||[]).slice(0,2).join(' | ')}
+Best achievements: ${(p.achievements||[]).slice(0,2).join(' | ')}
+Unique value: ${p.unique_value||'—'}
+JD context: ${(job.description||'').slice(0,500)}
+
+BANNED WORDS — use NONE: passionate, leverage, synergy, hardworking, team player, innovative, dynamic, results-driven, go-getter, self-starter, seasoned, spearheaded, orchestrated, utilised.
+
+SELF-CHECK before returning: Is P1 specific to ${job.company}? Does P2 have a number? Is total under 250 words?
+
+Return ONLY the letter text starting with "Dear Hiring Manager," — no date, no address.`;
+  return ai(SYS,USR,'primary');
+}
+
+/* ══════════════════════════════════════════════════════
+   ★ META-PROMPT 6: INTERVIEW PREP
+   STAR questions + hiring manager concerns + story prep.
+   Role-specific, not generic.
+══════════════════════════════════════════════════════ */
+/* ══════════════════════════════════════════════════════
+   ★ META-PROMPT 6: INTERVIEW PREP — India PM patterns
+   ──────────────────────────────────────────────────────
+   Meta-prompting principles:
+   1. INDIA PM INTERVIEW TAXONOMY — 5 question types used in India
+   2. COMPANY TIER AWARENESS — startup vs MNC vs consulting patterns
+   3. STAR STORY FRAMEWORK — structured story prep for each achievement
+   4. GAP MANAGEMENT — proactively address the hiring manager's concerns
+   5. SALARY ANCHOR — India PM market data to negotiate confidently
+   6. INSIDER QUESTIONS — questions that show research, not flattery
+   7. SPECIFICITY REQUIREMENT — every answer anchored to candidate's real experience
+══════════════════════════════════════════════════════ */
+async function genInterviewPrep(job){
+  const p=APP.profile;
+  const isMNC=['mastercard','siemens','cisco','oracle','sap','broadcom','nutanix','datadog','mongodb','cloudflare'].some(s=>job.company.toLowerCase().includes(s));
+  const isStartup=['razorpay','zepto','cred','meesho','groww','druva','pubmatic'].some(s=>job.company.toLowerCase().includes(s));
+  const companyType=isMNC?'large MNC/enterprise':isStartup?'Indian startup/scaleup':'mid-size tech company';
+
+  const SYS=`You are India's leading PM interview coach. You've trained 5,000+ product managers who've landed roles at FAANG, Indian unicorns, and Fortune 500 companies. You know the exact interview patterns used at Indian tech companies and MNCs. Your prep is brutally specific — no generic advice that applies to any job.`;
+
+  const USR=`Create a complete, actionable interview prep guide for this candidate. Think like the hiring manager at ${job.company}.
+
+CANDIDATE: ${p.name} | ${p.seniority} | ${p.years} yrs exp | ${p.domain}
+TARGET: ${job.title} at ${job.company} (${companyType})
+MATCH SCORE: ${job.score}/100 (${job.verdict})
+KNOWN GAPS: ${(job.gaps||[]).join(', ')||'None identified'}
+CANDIDATE STRENGTHS: ${(job.strengths||[]).slice(0,3).join(' | ')}
+KEY ACHIEVEMENTS: ${(p.achievements||[]).slice(0,3).join(' | ')}
+
+════════ SECTION 1: 6 LIKELY QUESTIONS ════════
+Indian PM interviews use these question types — cover all:
+• Behavioural (STAR) — past experience
+• Product design — design a product for [X]
+• Strategy/market — how would you grow [metric] by 20%?
+• Metrics/data — what metrics would you track for [feature]?
+• Case study — our [product] has [problem], what do you do?
+• Conflict/leadership — how do you handle [disagreement]
+
+For each question: Q: [question] | TYPE: [type] | WHAT THEY'RE TESTING: [real intent] | TRAP TO AVOID: [common mistake]
+
+════════ SECTION 2: HIRING MANAGER'S CONCERNS ════════
+Based on gaps: ${(job.gaps||[]).join(', ')||'minimal gaps'}
+For each concern: WORRY → EVIDENCE TO COUNTER IT (use candidate's real achievements)
+
+════════ SECTION 3: STAR STORIES TO PREPARE ════════
+Map 3 of the candidate's achievements to THIS job's requirements:
+Story format: TITLE | Situation (1 sentence) | Action (what you specifically did) | Result (number) | Relevance to ${job.company}
+
+════════ SECTION 4: SMART QUESTIONS TO ASK ════════
+3 questions that signal strategic thinking, not just curiosity:
+• Must reference something specific about ${job.company}'s product/market
+• Must show you think about impact, not just features
+• One must be about success metrics for this role
+
+════════ SECTION 5: SALARY NEGOTIATION (India PM market) ════════
+Based on ${p.seniority} level, ${p.years} years, ${p.domain} domain at a ${companyType}:
+• Realistic range for this role (in LPA)
+• Your target ask and walk-away number
+• One anchoring statement to use when asked "What are your expectations?"
+
+Return as clean, structured text with clear section headers. Be specific to THIS candidate and THIS company — no generic advice.`;
+  return ai(SYS,USR,'primary');
+}
+
+/* ══ STUDIO UTILS ══ */
+function currentContent(){return APP.currentTab==='resume'?APP.tailored:APP.currentTab==='cover'?APP.cover:APP.prep;}
+function copyStudio(){
+  const t=currentContent();if(!t){toast('Content not ready yet — wait for AI to finish','warning');return;}
+  navigator.clipboard.writeText(t).then(()=>{const b=document.querySelector('.small-btn');if(b){b.textContent='Copied!';setTimeout(()=>b.textContent='Copy',2000);}});
+}
+/* ══════════════════════════════════════════════════════
+   PRODUCTION-GRADE DOCUMENT EXPORT
+   ──────────────────────────────────────────────────────
+   3 export options:
+   1. Word .docx via docx.js (properly formatted)
+   2. PDF via browser print (fallback)
+   3. Copy to clipboard (always available)
+══════════════════════════════════════════════════════ */
+function parseResumeIntoSections(text){
+  /* Parse plain text resume into structured sections for DOCX */
+  const lines=text.split('\n');
+  const sections=[];
+  let currentSection=null;
+  for(const raw of lines){
+    const l=raw.trim();
+    if(!l){if(currentSection)sections.push({type:'space'});continue;}
+    /* Detect all-caps section headers (EXPERIENCE, EDUCATION, SKILLS, etc.) */
+    const isHeader=l===l.toUpperCase()&&l.replace(/[^A-Z]/g,'').length>3&&l.length<50&&!l.includes('@');
+    /* Detect bullet points */
+    const isBullet=l.startsWith('•')||l.startsWith('-')||l.startsWith('·')||l.startsWith('*');
+    /* Detect headline (first non-empty line usually) */
+    const isFirst=sections.filter(s=>s.type!=='space').length===0;
+    if(isFirst&&!isHeader){sections.push({type:'headline',text:l});}
+    else if(isHeader){sections.push({type:'section',text:l});}
+    else if(isBullet){sections.push({type:'bullet',text:l.replace(/^[•\-·*]\s*/,'')});}
+    else{sections.push({type:'para',text:l});}
+  }
+  return sections;
+}
+
+async function dlAsDocx(text,company,docType){
+  if(typeof docx==='undefined'){
+    toast('Word export loading… using PDF instead','warning');
+    dlAsPdf(text,company,docType);return;
+  }
+  try{
+    const {Document,Packer,Paragraph,TextRun,HeadingLevel,AlignmentType,BorderStyle,UnderlineType}=docx;
+    const sections=parseResumeIntoSections(text);
+    const children=sections.map(s=>{
+      if(s.type==='headline'){
+        return new Paragraph({children:[new TextRun({text:s.text,bold:true,size:32,color:'1a1a2e'})],spacing:{after:100}});
+      }
+      if(s.type==='section'){
+        return new Paragraph({children:[new TextRun({text:s.text,bold:true,size:24,color:'4361EE'})],
+          border:{bottom:{color:'4361EE',space:1,style:BorderStyle.SINGLE,size:6}},spacing:{before:200,after:80}});
+      }
+      if(s.type==='bullet'){
+        return new Paragraph({children:[new TextRun({text:s.text,size:22})],
+          bullet:{level:0},spacing:{after:40}});
+      }
+      if(s.type==='space'){return new Paragraph({children:[new TextRun('')],spacing:{after:60}});}
+      return new Paragraph({children:[new TextRun({text:s.text,size:22})],spacing:{after:40}});
+    });
+    const doc=new Document({creator:'JobPilot v2',title:`${docType} - ${company}`,
+      styles:{default:{document:{run:{font:'Calibri',size:22}}}},
+      sections:[{properties:{page:{margin:{top:914,right:914,bottom:914,left:914}}},children}]
+    });
+    const blob=await Packer.toBlob(doc);
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(blob);
+    a.download=`${docType}_${company.replace(/\s+/g,'_')}.docx`;
+    a.click();URL.revokeObjectURL(a.href);
+    toast(`${docType}.docx downloaded — open in Word or Google Docs ✓`,'success',4000);
+  }catch(e){
+    console.error('DOCX error:',e);
+    dlAsPdf(text,company,docType);
+  }
+}
+
+function dlAsPdf(text,company,docType){
+  const title=`${docType} — ${company}`;
+  const w=window.open('','_blank');
+  w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${title}</title>
+  <style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:'Calibri',Arial,sans-serif;font-size:11pt;line-height:1.55;color:#111}
+  .page{max-width:8.27in;margin:0 auto;padding:.85in .9in}pre{white-space:pre-wrap;font-family:inherit;font-size:10.5pt;line-height:1.6}
+  .bar{position:fixed;top:0;left:0;right:0;background:#4361EE;color:#fff;padding:10px 20px;display:flex;align-items:center;gap:12px;font-size:13px;z-index:100}
+  .bar button{background:#fff;color:#4361EE;border:none;padding:7px 14px;border-radius:6px;font-weight:700;cursor:pointer}
+  @media print{.bar{display:none!important}.page{padding:.75in}}@page{margin:.75in;size:A4}</style></head>
+  <body><div class="bar"><span style="flex:1">JobPilot — ${title}</span>
+  <span style="font-size:10px;opacity:.8">Ctrl+P → Save as PDF</span>
+  <button onclick="window.print()">🖨 Save as PDF</button>
+  <button onclick="window.close()">✕</button></div>
+  <div class="page" style="margin-top:52px"><pre>${text.replace(/&/g,'&amp;').replace(/</g,'&lt;')}</pre></div>
+  </body></html>`);
+  w.document.close();
+  toast('PDF view opened — press Ctrl+P','success',3000);
+}
+
+function dlStudio(){
+  const t=currentContent();
+  if(!t){toast('Content not ready yet','warning');return;}
+  const co=APP.tailorJob?.company||'Job';
+  const labels={resume:'Resume',cover:'CoverLetter',prep:'InterviewPrep'};
+  dlAsDocx(t,co,labels[APP.currentTab]);
+}
+function printStudio(){
+  const t=currentContent();if(!t){toast('Content not ready','warning');return;}
+  dlAsPdf(t,APP.tailorJob?.company||'Job',{resume:'Resume',cover:'CoverLetter',prep:'InterviewPrep'}[APP.currentTab]);
+}
+
+/* ══ TRACKER ══ */
+function renderTracker(){
+  const n=APP.apps.length;$('tracker-sub').textContent=n+' application'+(n!==1?'s':'')+' tracked';
+  $('tracker-empty').style.display=n?'none':'block';$('kanban').style.display=n?'grid':'none';
+  if(!n)return;
+  $('kanban').innerHTML=COLS.map(col=>{
+    const items=APP.apps.filter(a=>a.status===col);
+    return`<div class="kanban-col"><div class="col-head" style="color:${CT[col]}">${col}<span class="col-count">${items.length}</span></div>
+    ${items.map(a=>{
+      const idx=APP.apps.indexOf(a);
+      return`<div class="kan-card">
+        <div class="kan-score" style="color:${scCol(a.score)}">${a.score}/100</div>
+        <div class="kan-title">${a.title}</div><div class="kan-co">${a.company}</div>
+        <div class="kan-date">${a.date}</div>
+        <div class="kan-acts">
+          ${COLS.filter(c=>c!==col).map(c=>`<button class="kan-btn" style="background:${CK[c]};color:${CT[c]}" onclick="moveApp(${idx},'${c}')">${c}</button>`).join('')}
+          <a href="${a.url}" target="_blank" class="kan-btn" style="background:#f0f1f6;color:#3d4048;text-decoration:none">Apply ↗</a>
+        </div></div>`;}).join('')}</div>`;
+  }).join('');
+}
+function moveApp(idx,col){APP.apps[idx].status=col;if(col==='Offer')setTimeout(()=>openModal('m-celebrate'),500);renderTracker();save();}
+
+/* ══════════════════════════════════════════════════════
+   ★ META-PROMPT 7: RESUME DIAGNOSTICS — India ATS + Recruiter
+   ──────────────────────────────────────────────────────
+   Meta-prompting principles:
+   1. INDIA ATS SYSTEMS — Naukri, LinkedIn, Taleo, SuccessFactors specifics
+   2. INDIA RECRUITER EXPECTATIONS — college brand, quantification norms
+   3. 4-DIMENSION RUBRIC — ATS + Keywords + Achievements + Positioning
+   4. SEVERITY TRIAGE — CRITICAL blocks first, not alphabetical
+   5. QUOTE-THE-RESUME — specific issues, not vague advice
+   6. ACTIONABLE FIXES — exact what-to-do, not "improve your resume"
+   7. SCORE SIMULATION — predict interview callback rate
+══════════════════════════════════════════════════════ */
+async function runDiagnostics(){
+  if(!APP.resumeText){toast('Upload your resume first from the Upload page','warning');return;}
+  $('run-diag-btn').textContent='Analysing…';$('run-diag-btn').disabled=true;
+  $('diag-results').style.display='none';
+  const SYS=`You are India's top resume audit system. You combine:
+• Enterprise ATS behaviour (Naukri RMS, LinkedIn Recruiter, Taleo, SuccessFactors, Greenhouse)
+• 15 years of Indian recruiting experience across Tier-1 MNCs and startups
+• Deep knowledge of what Indian hiring managers expect for PM and tech roles
+
+You give specific, actionable feedback. "Improve your summary" is useless. "Add a 2-line summary starting with your title, years of experience, and top domain achievement" is useful. Your audits have helped 20,000+ Indian professionals get more callbacks.`;
+
+  const USR=`Perform a complete ATS + recruiter audit on this resume for the Indian job market.
+
+═══ SCORING DIMENSIONS (25 points each = 100 total) ═══
+
+1. ATS COMPATIBILITY (0-25):
+India-specific checks:
+• No tables/columns (Naukri and Taleo can't parse multi-column layouts)
+• No headers/footers with important info (ATS ignores them)
+• File-type friendly section headers (EXPERIENCE not ◆ Work History ◆)
+• No graphics, images, or icons (break parsing)
+• Standard fonts (Calibri, Arial, Times — not custom fonts)
+• Contact info in body, not header
+• Date format consistent (Month YYYY or MM/YYYY — not MM/YY or just "2023")
+
+2. KEYWORD DENSITY (0-25):
+India PM/tech market checks:
+• Role-specific keywords: product roadmap, stakeholder management, OKRs, go-to-market
+• India-favoured technical terms: Agile, Scrum, data-driven, cross-functional
+• Domain keywords relevant to their industry
+• Action verbs (Led, Built, Launched, Grew — not "Responsible for", "Worked on")
+• LinkedIn/Naukri search query terms recruiters use
+
+3. ACHIEVEMENT QUALITY (0-25):
+India recruiter expectations:
+• Minimum 3 quantified achievements with INR/USD, %, user counts, or team size
+• Outcome-first phrasing ("Grew ARR by 40%" not "Worked on revenue initiatives")
+• Scale indicators (enterprise, 10M users, Series-B, Fortune 500)
+• Recency — most impactful achievements from last 3 years prominent
+
+4. POSITIONING CLARITY (0-25):
+India market signals:
+• Clear target role in headline or summary (Indian recruiters filter in 6 seconds)
+• Education section prominent with institution brand if notable (IIT/IIM/NIT adds weight)
+• Seniority signals clear (total years, team size managed, budget owned)
+• Career narrative — no unexplained gaps > 6 months
+• Professional summary/headline present (many Indian resumes skip this)
+
+═══ SEVERITY LEVELS ═══
+CRITICAL → Will cause ATS rejection before human sees it
+IMPORTANT → Significantly reduces shortlist probability — fix before applying
+MINOR → Will improve quality, not immediately blocking
+
+═══ RULES FOR FEEDBACK ═══
+• Quote the ACTUAL resume text that has the problem
+• Give the EXACT fix (word-for-word replacement if possible)
+• Order issues by severity (CRITICAL first)
+• Maximum 8 issues total — prioritise impact
+
+Resume text:
+${APP.resumeText.slice(0,5200)}
+
+Return ONLY valid JSON (no markdown):
+{"total":0,"dimensions":{"ats":0,"keywords":0,"achievements":0,"positioning":0},"verdict":"one-sentence overall assessment","callback_estimate":"estimated % callback rate with this resume","issues":[{"dimension":"ats|keywords|achievements|positioning","severity":"CRITICAL|IMPORTANT|MINOR","what":"specific problem quoting resume text","fix":"exact actionable step"}]}`;
+  try{
+    const r=pJ(await ai(SYS,USR,'primary'));
+    /* Add callback estimate to verdict display */
+    if(r.callback_estimate&&r.verdict)r.verdict=`${r.verdict} · Est. callback rate: ${r.callback_estimate}`;
+    $('diag-results').style.display='block';
+    renderDiagnostics(r);
+  }catch(e){toast('Diagnostic error: '+e.message,'error',5000);}
+  $('run-diag-btn').textContent='🩺 Re-run diagnostic';$('run-diag-btn').disabled=false;
+}
+function renderDiagnostics(d){
+  const score=d.total||0;
+  const circ=2*Math.PI*52;
+  const fill=Math.round(circ*(1-score/100));
+  $('ring-fill').style.strokeDashoffset=fill;
+  $('ring-fill').style.stroke=score>=70?'var(--green)':score>=50?'var(--amber)':'var(--red)';
+  $('ring-num').textContent=score;
+  $('diag-verdict').textContent=d.verdict||'';
+  const dims=[
+    {key:'ats',label:'ATS Compatible',max:25},
+    {key:'keywords',label:'Keyword Density',max:25},
+    {key:'achievements',label:'Achievement Quality',max:25},
+    {key:'positioning',label:'Positioning Clarity',max:25},
+  ];
+  $('diag-dims').innerHTML=dims.map(dim=>{
+    const v=d.dimensions?.[dim.key]||0;
+    const col=v>=20?'var(--green)':v>=12?'var(--amber)':'var(--red)';
+    return`<div class="dim-card">
+      <div class="dim-score" style="color:${col}">${v}</div>
+      <div class="dim-max">/ ${dim.max}</div>
+      <div class="dim-label">${dim.label}</div>
+      <div class="dim-bar"><div class="dim-fill" style="width:${(v/dim.max)*100}%;background:${col}"></div></div>
+    </div>`;
+  }).join('');
+  const sevOrder={CRITICAL:0,IMPORTANT:1,MINOR:2};
+  const sorted=(d.issues||[]).sort((a,b)=>(sevOrder[a.severity]||2)-(sevOrder[b.severity]||2));
+  $('issues-list').innerHTML=sorted.map(i=>{
+    const sc=i.severity==='CRITICAL'?'sev-critical':i.severity==='IMPORTANT'?'sev-important':'sev-minor';
+    return`<div class="issue-card">
+      <span class="issue-sev ${sc}">${i.severity}</span>
+      <div class="issue-content">
+        <div class="issue-what">${i.what}</div>
+        <div class="issue-fix">→ ${i.fix}</div>
+      </div></div>`;
+  }).join('')||'<div style="text-align:center;padding:20px;color:var(--green);font-weight:600">✓ No major issues found</div>';
+}
+
+/* ══ FREEMIUM ══ */
+function updatePill(){
+  const el=$('pill-free');if(!el)return;
+  if(APP.isPro){el.textContent='✓ Pro';el.style.color='var(--green)';}
+  else{const left=Math.max(0,FREE_LIMIT-APP.tailorsUsed);el.textContent=`${left} free tailor${left!==1?'s':''} left`;}
+}
+function handleUpgrade(){window.open('https://zynetra.tech/#contact','_blank');}
+function shareApp(){
+  const txt='I used JobPilot to land my job — it scans LinkedIn, Indeed + 300 company boards and tailors your resume per application. Try it: https://jobpilot.app';
+  navigator.share?navigator.share({text:txt,url:'https://jobpilot.app'}):navigator.clipboard.writeText(txt).then(()=>toast('Share link copied to clipboard!','success'));
+  closeModal('m-celebrate');
+}
+
+/* ══ SETTINGS ══ */
+function populateSettings(){
+  $('s-or-key').value=APP.orKey||'';
+  $('s-rapid-key').value=APP.rapidKey||'';
+  $('s-primary-model').value=APP.primaryModel||MODEL_PRIMARY;
+  $('s-batch-model').value=APP.batchModel||MODEL_BATCH;
+  $('s-local-ep').value=APP.localEndpoint||'';
+  $('s-local-model').value=APP.localModel||'qwen2.5:32b';
+  $('s-use-local').checked=APP.useLocal||false;
+  const left=Math.max(0,FREE_LIMIT-APP.tailorsUsed);
+  $('free-status').innerHTML=APP.isPro
+    ?'<b style="color:var(--green)">✓ Pro — unlimited tailoring</b>'
+    :`Free tier: <b>${left}/${FREE_LIMIT} tailors remaining</b><br><small style="color:var(--ink3)">Primary: ${APP.primaryModel} · Batch: ${APP.batchModel}</small>`;
+}
+function saveSettings(){
+  const or=$('s-or-key').value.trim(),rapid=$('s-rapid-key').value.trim();
+  const pm=$('s-primary-model').value.trim(),bm=$('s-batch-model').value.trim();
+  const ep=$('s-local-ep').value.trim(),lm=$('s-local-model').value.trim();
+  const ul=$('s-use-local').checked;
+  if(or){APP.orKey=or;localStorage.setItem('jp2_or',or);}
+  if(rapid){APP.rapidKey=rapid;localStorage.setItem('jp2_rapid',rapid);}
+  if(pm){APP.primaryModel=pm;localStorage.setItem('jp2_primary',pm);}
+  if(bm){APP.batchModel=bm;localStorage.setItem('jp2_batch',bm);}
+  APP.localEndpoint=ep;localStorage.setItem('jp2_local_ep',ep);
+  APP.localModel=lm||'qwen2.5:32b';localStorage.setItem('jp2_local_model',APP.localModel);
+  APP.useLocal=ul;localStorage.setItem('jp2_use_local',ul);
+  closeModal('m-settings');
+  toast('Settings saved — using '+APP.primaryModel,'success');
+}
+function clearAll(){
+  if(!confirm('This will clear ALL data including jobs, applications and API keys. Continue?'))return;
+  ['jp2_or','jp2_rapid','jp2_primary','jp2_batch','jp2_local_ep','jp2_local_model','jp2_use_local','jp2_jobs','jp2_apps','jp2_profile','jp2_resume','jp2_used','jp2_pro','jp2_loc','jp2_role'].forEach(k=>localStorage.removeItem(k));
+  location.reload();
+}
+</script>
+</body>
+</html>
