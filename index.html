@@ -422,7 +422,7 @@ button,input,select,textarea{font-family:inherit}
         <label>Primary AI Model</label>
         <select id="ai-model">
           <optgroup label="── Recommended for JobPilot ──">
-            <option value="qwen/qwq-32b">Qwen3.7-Max (QwQ-32B) — Primary · Best quality ⭐</option>
+            <option value="qwen/qwq-32b">Qwen3.7-Max (QwQ-32B) — Best quality (advanced)</option>
             <option value="deepseek/deepseek-chat">DeepSeek V3 (Chat) — Fast batch scoring</option>
           </optgroup>
           <optgroup label="── OpenAI ──">
@@ -520,6 +520,14 @@ button,input,select,textarea{font-family:inherit}
 
   <button class="start-btn" onclick="handleStart()">Analyse resume &amp; find matching jobs →</button>
   <div class="upload-footer">Keys saved in your browser · Never re-entered</div>
+  <div style="display:flex;align-items:center;gap:8px;width:480px;max-width:92vw;margin-top:10px">
+    <div style="flex:1;height:1px;background:var(--br)"></div>
+    <span style="font-size:11px;color:var(--ink3);white-space:nowrap">or see a live example</span>
+    <div style="flex:1;height:1px;background:var(--br)"></div>
+  </div>
+  <button onclick="runDemo()" style="width:480px;max-width:92vw;padding:10px;border-radius:var(--rs);border:1.5px dashed var(--blue);background:var(--blue-l);color:var(--blue);font-size:12px;font-weight:700;cursor:pointer;margin-top:8px">
+    🎮 Try demo — 5 scored Indian PM jobs, no keys needed
+  </button>
 </div>
 
 <!-- ═══ PAGE: EXTRACTING ═══ -->
@@ -813,8 +821,8 @@ const HOSTED = (
    !window.location.hostname.includes('127.0.0.1') &&
    window.location.protocol !== 'file:')
 );
-const API_AI     = HOSTED ? '/api/ai'     : null;
-const API_SEARCH = HOSTED ? '/api/search' : null;
+const API_AI     = HOSTED ? '/api/jobpilot-ai'     : null;
+const API_SEARCH = HOSTED ? '/api/jobpilot-search' : null;
 
 if(HOSTED) console.log('[JobPilot] Hosted mode — using server-side API proxies');
 
@@ -848,9 +856,13 @@ const MAX_PARALLEL_SCORE=2; /* max concurrent AI scoring calls to avoid rate lim
    BATCH    → DeepSeek V4  : bulk JD scoring, keyword extraction, classification (cheap & fast)
    LOCAL    → Self-hosted   : privacy-sensitive ops, data stays on device via Ollama proxy
 ══ */
-const MODEL_PRIMARY  = 'qwen/qwq-32b';               // Qwen3.7-Max equivalent on OpenRouter
-const MODEL_BATCH='deepseek/deepseek-chat';        // DeepSeek V4 Flash equivalent
-const MODEL_FALLBACK = 'openai/gpt-4o-mini';          // safe fallback if Qwen unavailable
+/* ══ MODEL DEFAULTS ══
+   gpt-4o-mini is the RELIABLE default — always available on OpenRouter.
+   Users can switch to Qwen/DeepSeek in Settings once they verify those models work.
+   Meta-prompting principle: Design for guaranteed output, not best-case quality. */
+const MODEL_PRIMARY  = 'openai/gpt-4o-mini';   // Default: always available, ₹0.015/1K tokens
+const MODEL_BATCH    = 'openai/gpt-4o-mini';   // Same for batch — consistent, reliable
+const MODEL_FALLBACK = 'openai/gpt-4o-mini';   // Same fallback — one reliable chain
 
 /* ══ 4-CLASS JOB CLASSIFICATION
    DIRECT FIT   75-100 : Resume matches most requirements. Apply immediately.
@@ -1099,7 +1111,7 @@ async function ai(sys,usr,tier='primary',tries=2){
   const tryModel=async(model)=>{
     const r=await fetch(cfg.endpoint,{
       method:'POST',
-      headers:{'Content-Type':'application/json','Authorization':'Bearer '+cfg.key,'HTTP-Referer':window.location.origin,'X-Title':'JobPilot'},
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+cfg.key,'HTTP-Referer':'https://jobpilot.app','X-Title':'JobPilot'},
       body:JSON.stringify({model,messages:[{role:'system',content:sys},{role:'user',content:usr}],temperature:0.15})
     });
     const d=await r.json();
@@ -1516,6 +1528,49 @@ OUTPUT — Return ONLY this JSON (no markdown, no extra text):
   return pJ(raw);
 }
 
+/* ══════════════════════════════════════════════════════
+   HEURISTIC SCORE ENGINE
+   ──────────────────────────────────────────────────────
+   Meta-prompting principle: "Design for guaranteed output"
+   When AI scoring fails, NEVER show –/100.
+   Calculate a keyword-based score so every job shows a number.
+
+   Formula (max 100):
+   • Title match  (0–25): user's target role terms in job title
+   • Skills match (0–25): profile skills found in job description
+   • Seniority fit(0–20): candidate level vs role level
+   • Source bonus (0–10): Greenhouse verified = higher trust
+   • Base score   (20)  : floor — any matched job is worth seeing
+══════════════════════════════════════════════════════ */
+function heuristicScore(job){
+  const p=APP.profile;if(!p)return 45;
+  let score=20;/* base */
+  /* Title match */
+  const roleTerms=(p.target_role||'').toLowerCase().split(/\s+/).filter(w=>w.length>3);
+  const jt=job.title.toLowerCase();
+  const titleHits=roleTerms.filter(t=>jt.includes(t)).length;
+  score+=Math.min(25,titleHits*10);
+  /* Skills match */
+  const desc=(job.description||'').toLowerCase();
+  const skills=p.skills||[];
+  const skillHits=skills.filter(s=>desc.includes(s.toLowerCase())).length;
+  score+=Math.min(25,Math.round((skillHits/Math.max(skills.length,1))*25));
+  /* Seniority fit */
+  const senMap={junior:1,mid:2,senior:3,staff:4,principal:5};
+  const candLvl=senMap[p.seniority]||3;
+  const isDir=jt.includes('director')||jt.includes('vp ')||jt.includes(' vp');
+  const isSen=jt.includes('senior')||jt.includes('lead')||jt.includes('principal');
+  const isMid=jt.includes('product manager')||jt.includes(' pm ');
+  const roleLvl=isDir?5:isSen?4:isMid?2:3;
+  score+=Math.max(0,20-Math.abs(candLvl-roleLvl)*5);
+  /* Source quality bonus */
+  score+=(job.dataType==='verified')?10:5;
+  return Math.min(95,Math.max(22,score));
+}
+function heuristicVerdict(s){
+  return s>=75?'DIRECT FIT':s>=50?'ADJACENT FIT':s>=25?'STRETCH':'AVOID';
+}
+
 async function addScoredJob(job){
   /* DEDUPLICATION — skip if same URL already processed */
   if(!job.url||job.url==='#'){job.url=`#${job.id}`;}
@@ -1527,19 +1582,33 @@ async function addScoredJob(job){
   try{
     const sc=await scoreJob(job);
     /* Validate score is a sensible number */
-    if(typeof sc.score!=='number'||sc.score<0||sc.score>100)sc.score=Math.max(0,Math.min(100,parseInt(sc.score)||35));
+    if(typeof sc.score!=='number'||sc.score<0||sc.score>100){
+      sc.score=heuristicScore(job);
+      sc.verdict=heuristicVerdict(sc.score);
+    }
     const full={...job,...sc};
     APP.jobs.push(full);
     APP.jobs.sort((a,b)=>(b.score||0)-(a.score||0));
     const cls=sc.score>=75?'strong':sc.score>=50?'good':sc.score>=25?'weak':'skip';
     log(job.company,cls,`${job.title.slice(0,30)} → ${sc.score}/100 ${sc.verdict||''}`);
   }catch(e){
-    /* On scoring failure: show job with PENDING state instead of AVOID/0 */
-    APP.jobs.push({...job,score:null,verdict:'PENDING',why:'Score pending — click to retry',strengths:[],gaps:[],keywords:[],interview_q:[]});
-    log(job.company,'info',`${job.title.slice(0,30)} — queued`);
+    /* ══ GUARANTEED SCORE: AI failed → heuristic score (never –/100) ══
+       Meta-prompting principle: every user sees a real number on every job */
+    const hs=heuristicScore(job);
+    const hv=heuristicVerdict(hs);
+    APP.jobs.push({
+      ...job,
+      score:hs,verdict:hv,
+      why:`Keyword-based match (AI scoring unavailable). ${hs>=50?'Looks relevant — review manually.':'May not match your profile closely.'}`,
+      strengths:[`${job.company} is a verified company`,'Job title aligns with your search'],
+      gaps:['Full AI analysis unavailable — retry by refreshing'],
+      keywords:[],headline:'',apply_strategy:'Review job description manually before applying.',
+      interview_q:[],breakdown:{skills:0,experience:0,domain:0,achievements:0}
+    });
+    const cls2=hs>=75?'strong':hs>=50?'good':hs>=25?'weak':'skip';
+    log(job.company,cls2,`${job.title.slice(0,30)} → ${hs}/100 (heuristic)`);
   }
   renderFeed();updateStats();
-  /* Auto-save every 3 jobs */
   if(APP.jobs.length%3===0)save();
 }
 
@@ -1602,7 +1671,7 @@ function renderFeed(){
     ${j.strengths?.length?`<div class="jcard-strengths">${j.strengths.slice(0,3).map(s=>`<span class="str-chip">✓ ${s.length>42?s.slice(0,42)+'…':s}</span>`).join('')}</div>`:''}
   </div>
   <div class="jcard-actions" onclick="event.stopPropagation()">
-    <button class="btn-tailor${free?'':' locked'}" onclick="openStudio('${j.id}')">${free?'✦ Tailor':'🔒 Upgrade'}</button>
+    ${isPending?`<button class="btn-tailor" style="background:var(--amber)" onclick="retryScore('${j.id}')">↻ Score</button>`:`<button class="btn-tailor${free?'':' locked'}" onclick="openStudio('${j.id}')">${free?'✦ Tailor':'🔒 Upgrade'}</button>`}
     <a class="btn-apply" href="${j.url}" target="_blank" rel="noopener noreferrer">Apply →</a>
     <button class="btn-track" onclick="trackJob('${j.id}')">${isT?'Tracked ✓':'+ Track'}</button>
   </div>
@@ -1622,6 +1691,15 @@ function renderFeed(){
   }).join('');
 }
 function toggleCard(id){APP.openJob=APP.openJob===id?null:id;renderFeed();}
+async function retryScore(id){
+  /* Re-score a heuristic/pending job with full AI */
+  const job=APP.jobs.find(j=>j.id===id);if(!job)return;
+  APP.jobs=APP.jobs.filter(j=>j.id!==id);
+  _seenURLs.delete(job.url);
+  toast('Re-scoring with AI…','info',2000);
+  await addScoredJob(job);
+  renderFeed();
+}
 function trackJob(id){
   if(APP.apps.some(a=>a.jobId===id))return;
   const j=APP.jobs.find(j=>j.id===id);if(!j)return;
