@@ -12,7 +12,8 @@
  *
  * anchor: 'hip' (default) | 'ankle' (feet planted) | 'hand' (hanging / pushing)
  */
-export const LEN = { torso: 66, upperArm: 34, forearm: 31, thigh: 46, shin: 46, foot: 16, head: 21 };
+// Proportions measured from the BodyParts3D skeleton, scaled to a torso of 66.
+export const LEN = { torso: 66, upperArm: 37, forearm: 31, thigh: 53, shin: 45, foot: 17, head: 24 };
 
 const rad = (d) => (d * Math.PI) / 180;
 const dir = (a) => [Math.cos(rad(a)), Math.sin(rad(a))];
@@ -53,8 +54,31 @@ export function solvePose(p) {
   };
 }
 
+const mirrorX = (p, cx) => [2 * cx - p[0], p[1]];
+
+/**
+ * Front-view joints (lateral raise, cable fly): the pose's arm and leg angles
+ * drive the figure's right side and the left side is its mirror image.
+ */
+export function frontJoints(p) {
+  const j = solvePose(p);
+  const cx = j.hip[0];
+  const shR = [j.neck[0] + 20, j.neck[1] + 6];
+  const hipR = [j.hip[0] + 10, j.hip[1]];
+  const armR = solvePose({ ...p, anchor: 'hip', at: shR, torso: 0 });
+  const elbow = [shR[0] + (armR.elbow[0] - armR.neck[0]), shR[1] + (armR.elbow[1] - armR.neck[1])];
+  const hand = [elbow[0] + (armR.hand[0] - armR.elbow[0]), elbow[1] + (armR.hand[1] - armR.elbow[1])];
+  const legR = solvePose({ ...p, anchor: 'hip', at: hipR });
+  return {
+    cx, neck: j.neck, hip: j.hip, head: [j.neck[0], j.neck[1] - 21],
+    shR, elbowR: elbow, handR: hand, hipR, kneeR: legR.knee, ankleR: legR.ankle, toeR: legR.toe,
+    shL: mirrorX(shR, cx), elbowL: mirrorX(elbow, cx), handL: mirrorX(hand, cx), hipL: mirrorX(hipR, cx),
+    kneeL: mirrorX(legR.knee, cx), ankleL: mirrorX(legR.ankle, cx), toeL: mirrorX(legR.toe, cx),
+  };
+}
+
 const lerp = (a, b, t) => a + (b - a) * t;
-const ANGLES = ['torso', 'head', 'ua', 'fa', 'th', 'sh', 'foot', 'ua2', 'fa2', 'th2', 'sh2', 'foot2', 'uaLen'];
+const ANGLES = ['torso', 'head', 'ua', 'fa', 'th', 'sh', 'foot', 'ua2', 'fa2', 'th2', 'sh2', 'foot2', 'uaLen', 'reach'];
 
 /** Blend two key poses (t = 0 → a, t = 1 → b). */
 export function blendPose(a, b, t) {

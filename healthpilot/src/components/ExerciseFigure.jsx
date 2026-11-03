@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { blendPose, repPhase, solvePose, STAGE_LABEL, STAGE_LOAD } from '../lib/pose.js';
+import { blendPose, frontJoints, repPhase, solvePose, STAGE_LABEL, STAGE_LOAD } from '../lib/pose.js';
 
 export const MUSCLE_COLOR = { primary: '#ef4444', secondary: '#f59e0b' };
 
@@ -7,8 +7,6 @@ const W = { torso: 28, ua: 13, fa: 11, th: 19, sh: 14, foot: 7 };
 const sub = (a, b) => [a[0] - b[0], a[1] - b[1]];
 const len = (v) => Math.hypot(v[0], v[1]) || 1;
 const at = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
-const mirrorX = (p, cx) => [2 * cx - p[0], p[1]];
-const mirrorA = (a) => 180 - a;
 
 /* Where each muscle sits on a side-view segment: which side (front/back), how far along, how thick. */
 const SIDE_MAP = {
@@ -65,22 +63,6 @@ const Seg = ({ a, b, w, cls = 'fig-body' }) => (
 );
 
 /* ── Front view (lateral raise, cable fly) ───────────────────────────── */
-function frontJoints(p) {
-  const j = solvePose(p);
-  const cx = j.hip[0];
-  const shR = [j.neck[0] + 20, j.neck[1] + 6];
-  const hipR = [j.hip[0] + 10, j.hip[1]];
-  const armR = solvePose({ ...p, anchor: 'hip', at: shR, torso: 0 });
-  const elbow = armR.elbow && [shR[0] + (armR.elbow[0] - armR.neck[0]), shR[1] + (armR.elbow[1] - armR.neck[1])];
-  const hand = [elbow[0] + (armR.hand[0] - armR.elbow[0]), elbow[1] + (armR.hand[1] - armR.elbow[1])];
-  const legR = solvePose({ ...p, anchor: 'hip', at: hipR });
-  return {
-    cx, neck: j.neck, hip: j.hip, head: [j.neck[0], j.neck[1] - 21],
-    shR, elbowR: elbow, handR: hand, hipR, kneeR: legR.knee, ankleR: legR.ankle,
-    shL: mirrorX(shR, cx), elbowL: mirrorX(elbow, cx), handL: mirrorX(hand, cx), hipL: mirrorX(hipR, cx), kneeL: mirrorX(legR.knee, cx), ankleL: mirrorX(legR.ankle, cx),
-  };
-}
-
 function frontMuscles(id, j) {
   const { cx, neck, hip } = j;
   const both = (fn) => [fn('R'), fn('L')];

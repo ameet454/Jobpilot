@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { useStore } from '../lib/store.jsx';
 import { EXERCISES, EXERCISE_BY_ID, MUSCLES, videoSearchUrl } from '../data/exercises.js';
 import {
@@ -8,6 +8,9 @@ import { dateKey, shortDay } from '../lib/dates.js';
 import ExerciseFigure, { FigureSvg, MUSCLE_COLOR } from './ExerciseFigure.jsx';
 import BodyMap from './BodyMap.jsx';
 import { Card, Segmented, Sheet, fmt } from './ui.jsx';
+
+// The 3-D trainer pulls in WebGL code, so it loads only when an exercise is opened.
+const Exercise3D = lazy(() => import('./Exercise3D.jsx'));
 
 const WEEK = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
 const mmss = (s) => `${Math.floor(s / 60)}:${String(Math.max(0, Math.floor(s % 60))).padStart(2, '0')}`;
@@ -37,7 +40,9 @@ export function ExerciseSheet({ id, onClose, onOpen }) {
     <Sheet open={!!ex} onClose={onClose} title={ex?.name || ''} wide>
       {ex && (
         <div className="stack">
-          <ExerciseFigure key={ex.id} ex={ex} />
+          <Suspense fallback={<ExerciseFigure ex={ex} />}>
+            <Exercise3D key={ex.id} ex={ex} />
+          </Suspense>
           <div className="feel">
             <b>🎯 Where you should feel it</b>
             <p>{ex.feel}</p>

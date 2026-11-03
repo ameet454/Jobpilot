@@ -1,0 +1,8 @@
+The files anatomy.bin and anatomy.json in this folder are derived from BodyParts3D.
+
+BodyParts3D, Copyright© The Database Center for Life Science licensed by CC Attribution-Share Alike 2.1 Japan
+https://creativecommons.org/licenses/by-sa/2.1/jp/deed.en
+
+Changes: selected muscles and bones, re-oriented and scaled, simplified, welded, and
+skinned to a 14-bone exercise rig (see tools/anatomy/). These derived files are shared
+under the same licence (CC BY-SA 2.1 JP).

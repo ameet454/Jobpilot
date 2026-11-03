@@ -1,7 +1,8 @@
 /* HealthPilot service worker — offline app shell.
  * Navigations: network-first (fresh deploys win), cached fallback offline.
- * Hashed /assets/*: cache-first (immutable). API calls: never cached. */
-const CACHE = 'healthpilot-v3';
+ * Hashed /assets/* and the /anatomy/ model: cache-first. The anatomy files are
+ * not hashed, so bump CACHE whenever they change. API calls: never cached. */
+const CACHE = 'healthpilot-v4';
 // Relative to this script, so it works at a domain root or in a subfolder.
 const SHELL = ['./', './index.html', './icon.svg', './manifest.webmanifest'];
 const INDEX = new URL('./index.html', self.location).href;
@@ -31,7 +32,7 @@ self.addEventListener('fetch', (e) => {
   }
   e.respondWith(
     caches.match(e.request).then((hit) => hit || fetch(e.request).then((res) => {
-      if (res.ok && url.pathname.includes('/assets/')) {
+      if (res.ok && (url.pathname.includes('/assets/') || url.pathname.includes('/anatomy/'))) {
         const copy = res.clone();
         caches.open(CACHE).then((c) => c.put(e.request, copy));
       }
