@@ -20,7 +20,12 @@ HealthifyMe is the market leader in India. These are the most common complaints 
 | Heavy app | Loads ~72 KB of gzipped JS |
 
 ### Features
-- **Today:** calorie ring, protein/carbs/fat/fibre bars, meals grouped as breakfast/lunch/snacks/dinner, tap-to-fill water glasses, and the top coach insight.
+- **Home dashboard:** a day score from six habits (calories, protein, water, steps, sleep, workout), a checklist with one-tap actions, a 7-day habit grid, a front/back body heat map of hard sets per muscle this week (10–20 sets is the common growth target), and recent personal records.
+- **Gym:**
+  - **5-day plans:** Push/Pull/Legs/Upper/Lower or a body-part split, scaled for beginner, intermediate or advanced. The app always starts the next day in the cycle.
+  - **28 animated exercises:** each animation moves at the exercise's real tempo. The muscle that should feel the stress glows **red** and helpers glow **orange**, brighter on the lifting part of the rep, with a pulsing "feel it here" ring. Pause and scrub through the rep, or watch in slow motion. Each exercise also has a body map, step-by-step form, breathing, common mistakes, alternatives and a YouTube form-video search.
+  - **Workout log:** last session's numbers beside every set, double-progression targets (add weight once every set hits the top of the rep range), warm-up/drop/failure sets, an automatic rest timer that vibrates, and PR badges using estimated 1-rep max (Epley).
+- **Today (meals):** calorie ring, protein/carbs/fat/fibre bars, meals grouped as breakfast/lunch/snacks/dinner, tap-to-fill water glasses, and the top coach insight.
 - **Log food:**
   - Smart text input and a search with ranked fuzzy matching over 157 Indian dishes.
   - Recent, saved and custom foods, plus a browse view with diet markers.

@@ -8,12 +8,16 @@ import Track from './components/Track.jsx';
 import Progress from './components/Progress.jsx';
 import Coach from './components/Coach.jsx';
 import Settings from './components/Settings.jsx';
+import Dashboard from './components/Dashboard.jsx';
+import Gym from './components/Gym.jsx';
 import { Sheet } from './components/ui.jsx';
 import { FOODS } from './data/foods.js';
+import { EXERCISES } from './data/exercises.js';
 
 const TABS = [
-  { id: 'today', label: 'Today', icon: '🏠' },
-  { id: 'food', label: 'Log food', icon: '🍽️' },
+  { id: 'home', label: 'Home', icon: '🏠' },
+  { id: 'today', label: 'Meals', icon: '🍽️' },
+  { id: 'gym', label: 'Gym', icon: '🏋️' },
   { id: 'track', label: 'Track', icon: '📊' },
   { id: 'progress', label: 'Progress', icon: '📈' },
   { id: 'coach', label: 'Coach', icon: '💬' },
@@ -21,7 +25,7 @@ const TABS = [
 
 export default function App() {
   const { state, dispatch } = useStore();
-  const [tab, setTab] = useState('today');
+  const [tab, setTab] = useState('home');
   const [date, setDate] = useState(dateKey());
   const [meal, setMeal] = useState(mealForHour());
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -53,6 +57,7 @@ export default function App() {
             <li>🇮🇳 {FOODS.length} Indian dishes with real portion sizes</li>
             <li>🔒 No sign-up. Your data never leaves your phone</li>
             <li>📉 Smoothed weight trend that ignores water-weight noise</li>
+            <li>🏋️ 5-day gym plan, {EXERCISES.length} animated exercises showing which muscle to feel</li>
           </ul>
         </div>
         <div className="card">
@@ -64,6 +69,7 @@ export default function App() {
   }
 
   const openFood = (m) => { setMeal(m); setTab('food'); };
+  const navTab = tab === 'food' ? 'today' : tab;
 
   return (
     <div className="app">
@@ -78,6 +84,8 @@ export default function App() {
       </header>
 
       <main className="content">
+        {tab === 'home' && <Dashboard date={date} goTo={(t) => (t === 'food' ? openFood(mealForHour()) : setTab(t))} />}
+        {tab === 'gym' && <Gym date={date} />}
         {tab === 'today' && <Today date={date} onAddFood={openFood} goTo={setTab} />}
         {tab === 'food' && <Food date={date} meal={meal} setMeal={setMeal} onDone={() => setTab('today')} />}
         {tab === 'track' && <Track date={date} />}
@@ -87,7 +95,7 @@ export default function App() {
 
       <nav className="tabbar" aria-label="Main">
         {TABS.map((t) => (
-          <button key={t.id} className={tab === t.id ? 'on' : ''} aria-current={tab === t.id ? 'page' : undefined} onClick={() => setTab(t.id)}>
+          <button key={t.id} className={navTab === t.id ? 'on' : ''} aria-current={navTab === t.id ? 'page' : undefined} onClick={() => setTab(t.id)}>
             <span aria-hidden="true">{t.icon}</span>
             <small>{t.label}</small>
           </button>

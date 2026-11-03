@@ -1,7 +1,7 @@
 /* HealthPilot service worker — offline app shell.
  * Navigations: network-first (fresh deploys win), cached fallback offline.
  * Hashed /assets/*: cache-first (immutable). API calls: never cached. */
-const CACHE = 'healthpilot-v2';
+const CACHE = 'healthpilot-v3';
 // Relative to this script, so it works at a domain root or in a subfolder.
 const SHELL = ['./', './index.html', './icon.svg', './manifest.webmanifest'];
 const INDEX = new URL('./index.html', self.location).href;

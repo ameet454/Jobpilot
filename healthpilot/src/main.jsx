@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import App from './App.jsx';
 import { StoreProvider } from './lib/store.jsx';
 import './styles.css';
+import './gym.css';
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>

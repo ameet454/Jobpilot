@@ -20,6 +20,8 @@ export const initialState = {
   recents: [],
   fasting: { active: null, history: [] },
   settings: { theme: 'system' },
+  gym: { plan: 'ppl', level: 'beginner' },
+  workouts: {},
 };
 
 function load() {
@@ -37,6 +39,12 @@ const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(
 function updateDay(state, date, fn) {
   const day = { ...emptyDay(), ...state.days[date] };
   return { ...state, days: { ...state.days, [date]: fn(day) } };
+}
+
+function updateWorkout(state, date, fn) {
+  const w = state.workouts[date];
+  if (!w) return state;
+  return { ...state, workouts: { ...state.workouts, [date]: fn(w) } };
 }
 
 export function reducer(state, action) {
@@ -81,6 +89,30 @@ export function reducer(state, action) {
       return { ...state, fasting: { ...state.fasting, active: null } };
     case 'SET_THEME':
       return { ...state, settings: { ...state.settings, theme: action.theme } };
+    case 'GYM_SETTINGS':
+      return { ...state, gym: { ...state.gym, ...action.patch } };
+    case 'WORKOUT_START':
+      return { ...state, workouts: { ...state.workouts, [action.date]: action.session } };
+    case 'WORKOUT_SET_UPDATE':
+      return updateWorkout(state, action.date, (w) => ({ ...w, sets: w.sets.map((s) => (s.id === action.id ? { ...s, ...action.patch } : s)) }));
+    case 'WORKOUT_SET_ADD': {
+      return updateWorkout(state, action.date, (w) => {
+        const sets = [...w.sets];
+        const lastIdx = sets.map((s) => s.exId).lastIndexOf(action.exId);
+        const like = sets[lastIdx];
+        const set = { id: uid(), exId: action.exId, kg: like?.kg ?? '', reps: like?.reps ?? 10, type: 'normal', done: false };
+        sets.splice(lastIdx === -1 ? sets.length : lastIdx + 1, 0, set);
+        return { ...w, sets };
+      });
+    }
+    case 'WORKOUT_SET_REMOVE':
+      return updateWorkout(state, action.date, (w) => ({ ...w, sets: w.sets.filter((s) => s.id !== action.id) }));
+    case 'WORKOUT_FINISH':
+      return updateWorkout(state, action.date, (w) => ({ ...w, finishedAt: action.at ?? Date.now(), sets: w.sets.filter((s) => s.done) }));
+    case 'WORKOUT_DISCARD': {
+      const { [action.date]: _gone, ...rest } = state.workouts;
+      return { ...state, workouts: rest };
+    }
     case 'IMPORT':
       return { ...initialState, ...action.state };
     case 'RESET':
