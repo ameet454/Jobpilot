@@ -59,7 +59,32 @@ To turn on the AI features, add this environment variable:
 
 Without a key, the endpoint returns 503 and the app quietly uses its offline engine.
 
-## Deploy to Hostinger (shared / cloud web hosting)
+## Deploy to a Hostinger VPS (one command)
+
+`deploy/vps-setup.sh` does the whole job on an Ubuntu/Debian VPS:
+
+1. It finds the old app (`cdsco` by default; change it with `OLD_APP=name`). That covers nginx/Apache configs, folders, Docker containers, PM2 apps and systemd services.
+2. It backs everything up to `/root/cdsco-backup-<date>/` and removes it, but **only after you type `DELETE`**.
+3. It installs nginx, PHP-FPM, Node 20 and certbot.
+4. It builds HealthPilot from GitHub into `/var/www/healthpilot` and serves it on your domain.
+5. It turns on free HTTPS when the domain's DNS points at the VPS.
+
+In hPanel, open **VPS → Browser terminal** and run:
+
+```bash
+curl -fsSLo vps-setup.sh https://raw.githubusercontent.com/ameet454/Jobpilot/master/healthpilot/deploy/vps-setup.sh
+bash vps-setup.sh yourdomain.com --inspect      # dry run: shows what would be removed
+bash vps-setup.sh yourdomain.com                # do it
+```
+
+You can add these options in front of the command:
+- `OPENROUTER_API_KEY=sk-or-...` turns on the AI features.
+- `EMAIL=you@example.com` sets the address for certificate expiry notices.
+- `BRANCH=...` deploys a branch other than `master`.
+
+Re-run the same command at any time to deploy the latest code.
+
+## Deploy to Hostinger shared / cloud web hosting
 
 The build is fully static, plus one PHP file for the optional AI features (`api/coach.php`). It uses relative paths, so it works at your domain root (`public_html/`) or in a subfolder (`public_html/health/`).
 
@@ -69,16 +94,6 @@ The build is fully static, plus one PHP file for the optional AI features (`api/
 3. In hPanel, go to **Security → SSL** and make sure SSL is active. The included `.htaccess` forces HTTPS, which installing the app needs.
 4. *(Optional AI)* In `api/`, copy `config.example.php` to `config.php` and paste your OpenRouter key. Web access to that file is blocked.
 
-### Option B — auto-deploy from GitHub
-`.github/workflows/deploy-healthpilot-hostinger.yml` builds, tests and uploads over FTP on every push to `master` that touches `healthpilot/`. You can also run it manually from the **Actions** tab.
-
-1. In hPanel, open **Files → FTP Accounts** and note the FTP host, username and password.
-2. In GitHub, open **Settings → Secrets and variables → Actions** and add `FTP_SERVER`, `FTP_USERNAME` and `FTP_PASSWORD`.
-3. Optionally, also add `FTP_SERVER_DIR` (default `public_html/`; keep the trailing `/`) and `OPENROUTER_API_KEY`.
-
-The AI key is written to `api/config.php` on the server during deploy. It never goes into the repo.
-
-> **Hostinger VPS** (no PHP): serve `dist/` with nginx and run `api/coach.js` behind it with Node, or put PHP-FPM in front of `api/coach.php`.
 
 ## Structure
 
