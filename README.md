@@ -1,5 +1,7 @@
 # JobPilot v2 — AI Job Command Centre
 
+> Also in this repo: **[HealthPilot](healthpilot/)**, a React calorie & habit tracker for Indian food (see `healthpilot/README.md`).
+
 India's first AI job command centre. Real jobs from LinkedIn, Indeed, Glassdoor & 300+ company boards — ranked by your match score. Tailored resume in 2 minutes.
 
 ## Deploy to Vercel (5 minutes)
