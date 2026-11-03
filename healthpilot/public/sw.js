@@ -1,8 +1,10 @@
 /* HealthPilot service worker — offline app shell.
  * Navigations: network-first (fresh deploys win), cached fallback offline.
  * Hashed /assets/*: cache-first (immutable). API calls: never cached. */
-const CACHE = 'healthpilot-v1';
-const SHELL = ['/', '/index.html', '/icon.svg', '/manifest.webmanifest'];
+const CACHE = 'healthpilot-v2';
+// Relative to this script, so it works at a domain root or in a subfolder.
+const SHELL = ['./', './index.html', './icon.svg', './manifest.webmanifest'];
+const INDEX = new URL('./index.html', self.location).href;
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
@@ -17,19 +19,19 @@ self.addEventListener('activate', (e) => {
 
 self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
-  if (e.request.method !== 'GET' || url.origin !== location.origin || url.pathname.startsWith('/api/')) return;
+  if (e.request.method !== 'GET' || url.origin !== location.origin || url.pathname.includes('/api/')) return;
 
   if (e.request.mode === 'navigate') {
     e.respondWith(
       fetch(e.request)
-        .then((res) => { caches.open(CACHE).then((c) => c.put('/index.html', res.clone())); return res; })
-        .catch(() => caches.match('/index.html')),
+        .then((res) => { caches.open(CACHE).then((c) => c.put(INDEX, res.clone())); return res; })
+        .catch(() => caches.match(INDEX)),
     );
     return;
   }
   e.respondWith(
     caches.match(e.request).then((hit) => hit || fetch(e.request).then((res) => {
-      if (res.ok && url.pathname.startsWith('/assets/')) {
+      if (res.ok && url.pathname.includes('/assets/')) {
         const copy = res.clone();
         caches.open(CACHE).then((c) => c.put(e.request, copy));
       }

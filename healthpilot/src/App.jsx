@@ -45,7 +45,7 @@ export default function App() {
     return (
       <main className="onboarding">
         <div className="brand-hero">
-          <img src="/icon.svg" alt="" width="56" height="56" />
+          <img src={`${import.meta.env.BASE_URL}icon.svg`} alt="" width="56" height="56" />
           <h1>HealthPilot</h1>
           <p>Calorie, protein & habit tracking built for Indian food. Free, private, and fast — log a meal by typing it like a text.</p>
           <ul className="usp">
@@ -68,7 +68,7 @@ export default function App() {
   return (
     <div className="app">
       <header className="topbar">
-        <div className="brand"><img src="/icon.svg" alt="" width="28" height="28" /><span>HealthPilot</span></div>
+        <div className="brand"><img src={`${import.meta.env.BASE_URL}icon.svg`} alt="" width="28" height="28" /><span>HealthPilot</span></div>
         <div className="date-nav">
           <button className="icon-btn" aria-label="Previous day" onClick={() => setDate((d) => addDays(d, -1))}>‹</button>
           <button className="date-label" onClick={() => setDate(today)} title="Jump to today">{prettyDay(date, today)}</button>

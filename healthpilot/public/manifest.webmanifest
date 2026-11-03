@@ -2,11 +2,11 @@
   "name": "HealthPilot",
   "short_name": "HealthPilot",
   "description": "Free, private calorie & habit tracker for Indian food",
-  "start_url": "/",
+  "start_url": "./",
   "display": "standalone",
   "background_color": "#f6f8f7",
   "theme_color": "#0f9d74",
   "icons": [
-    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
   ]
 }

@@ -59,6 +59,27 @@ To turn on the AI features, add this environment variable:
 
 Without a key, the endpoint returns 503 and the app quietly uses its offline engine.
 
+## Deploy to Hostinger (shared / cloud web hosting)
+
+The build is fully static, plus one PHP file for the optional AI features (`api/coach.php`). It uses relative paths, so it works at your domain root (`public_html/`) or in a subfolder (`public_html/health/`).
+
+### Option A — upload a zip (5 minutes)
+1. Run `npm run build`, then zip the **contents** of `dist/`. Make sure the hidden `.htaccess` files are included.
+2. In hPanel, open **Files → File Manager → public_html** (or a subfolder), upload the zip, then right-click it and choose **Extract**.
+3. In hPanel, go to **Security → SSL** and make sure SSL is active. The included `.htaccess` forces HTTPS, which installing the app needs.
+4. *(Optional AI)* In `api/`, copy `config.example.php` to `config.php` and paste your OpenRouter key. Web access to that file is blocked.
+
+### Option B — auto-deploy from GitHub
+`.github/workflows/deploy-healthpilot-hostinger.yml` builds, tests and uploads over FTP on every push to `master` that touches `healthpilot/`. You can also run it manually from the **Actions** tab.
+
+1. In hPanel, open **Files → FTP Accounts** and note the FTP host, username and password.
+2. In GitHub, open **Settings → Secrets and variables → Actions** and add `FTP_SERVER`, `FTP_USERNAME` and `FTP_PASSWORD`.
+3. Optionally, also add `FTP_SERVER_DIR` (default `public_html/`; keep the trailing `/`) and `OPENROUTER_API_KEY`.
+
+The AI key is written to `api/config.php` on the server during deploy. It never goes into the repo.
+
+> **Hostinger VPS** (no PHP): serve `dist/` with nginx and run `api/coach.js` behind it with Node, or put PHP-FPM in front of `api/coach.php`.
+
 ## Structure
 
 ```
