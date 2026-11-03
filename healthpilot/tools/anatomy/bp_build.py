@@ -24,17 +24,27 @@ TORSO = 66.0
 s = TORSO / np.linalg.norm(Jmm['neck'] - Jmm['hip'])
 origin = Jmm['hip'].copy()
 J = {k: (v - origin) * s for k, v in Jmm.items()}
+# Spine split: the waist sits 42 % of the way from hip centre to shoulder centre.
+WAIST = 0.42
+J['waist'] = J['hip'] + (J['neck'] - J['hip']) * WAIST
+# Sternoclavicular joints: the medial ends of the clavicles (shoulder-girdle pivot).
+for sd, nm in ((1, 'right'), (-1, 'left')):
+    pid = next(k for k, v in meta['parts'].items() if v['name'] == f'{nm} clavicle')
+    cv = (data[f'{pid}__v'] - origin) * s
+    J[f'sc{sd}'] = cv[np.argsort(np.abs(cv[:, 2]))[:30]].mean(axis=0)
 floor = min(data[f'{pid}__v'][:, 1].min() for pid in meta['parts'])
 floor_y = (floor - origin[1]) * s
 
-BONES = ['torso', 'head']
+BONES = ['pelvis', 'chest', 'head']
 for sd in (1, -1):
-    BONES += [f'ua{sd}', f'fa{sd}', f'hand{sd}', f'th{sd}', f'sh{sd}', f'foot{sd}']
+    BONES += [f'girdle{sd}', f'ua{sd}', f'fa{sd}', f'hand{sd}', f'th{sd}', f'sh{sd}', f'foot{sd}']
 BI = {b: i for i, b in enumerate(BONES)}
 
 def seg(b):
-    if b == 'torso': return J['hip'], J['neck']
+    if b == 'pelvis': return J['hip'], J['waist']
+    if b == 'chest': return J['waist'], J['neck']
     if b == 'head': return J['neck'], J['head']
+    if b.startswith('girdle'): return J['sc' + b[6:]], J['shoulder' + b[6:]]
     k, sd = re.match(r'([a-z]+)(-?1)', b).groups()
     a, z = {'ua': ('shoulder', 'elbow'), 'fa': ('elbow', 'wrist'), 'hand': ('wrist', 'hand'), 'th': ('hip', 'knee'), 'sh': ('knee', 'ankle'), 'foot': ('ankle', 'toe')}[k]
     a = 'hip' + sd if a == 'hip' else a + sd
@@ -54,28 +64,33 @@ def frame(b):
 
 def allowed(name, group, side):
     S = '1' if side >= 0 else '-1'
+    G, UA, FA, HAND, TH, SH, FOOT = (f'{k}{S}' for k in ('girdle', 'ua', 'fa', 'hand', 'th', 'sh', 'foot'))
     n = name
     if group == 'bone':
-        if re.search(r'humerus', n): return [f'ua{S}']
-        if re.search(r'radius|ulna', n): return [f'fa{S}']
-        if re.search(r'carpal|phalanx of (?:hand|finger|thumb)|scaphoid|lunate|triquetral|pisiform|trapezium|trapezoid|capitate|hamate', n): return [f'hand{S}']
-        if re.search(r'femur', n): return [f'th{S}']
-        if re.search(r'patella', n): return [f'th{S}', f'sh{S}']
-        if re.search(r'tibia|fibula', n): return [f'sh{S}']
-        if re.search(r'metatarsal|phalanx|cuneiform|calcaneus|talus|navicular|cuboid', n): return [f'foot{S}']
-        if re.search(r'clavicle|scapula', n): return ['torso', f'ua{S}']
+        if re.search(r'humerus', n): return [UA]
+        if re.search(r'radius|ulna', n): return [FA]
+        if re.search(r'carpal|phalanx of (?:hand|finger|thumb)|scaphoid|lunate|triquetral|pisiform|trapezium|trapezoid|capitate|hamate', n): return [HAND]
+        if re.search(r'femur', n): return [TH]
+        if re.search(r'patella', n): return [TH, SH]
+        if re.search(r'tibia|fibula', n): return [SH]
+        if re.search(r'metatarsal|phalanx|cuneiform|calcaneus|talus|navicular|cuboid', n): return [FOOT]
+        if re.search(r'clavicle|scapula', n): return [G]
         return ['head']
     if re.search(r'masseter|temporalis|platysma', n): return ['head']
-    if re.search(r'sternocleidomastoid|splenius|levator scapulae', n): return ['torso', 'head']
-    if group in ('chest', 'shoulders') or re.search(r'latissimus|teres|infraspinatus|supraspinatus|coracobrachialis|pectoralis minor', n): return ['torso', f'ua{S}']
-    if group in ('traps',) or re.search(r'rhomboid|serratus', n): return ['torso', f'ua{S}'] if re.search(r'serratus', n) else ['torso', 'head']
-    if group in ('abs', 'lowerback'): return ['torso']
-    if group in ('biceps', 'triceps'): return [f'ua{S}', f'fa{S}']
-    if group == 'forearms': return [f'fa{S}', f'ua{S}', f'hand{S}']
-    if group == 'glutes' or re.search(r'tensor fasciae', n): return ['torso', f'th{S}']
-    if group in ('quads', 'hamstrings') or re.search(r'sartorius|gracilis|adductor', n): return [f'th{S}', f'sh{S}', 'torso']
-    if group == 'calves' or re.search(r'tibialis|fibularis|peroneus|extensor digitorum longus|extensor hallucis longus', n): return [f'sh{S}', f'th{S}', f'foot{S}']
-    return ['torso']
+    if re.search(r'sternocleidomastoid|splenius', n): return ['chest', 'head']
+    if re.search(r'levator scapulae', n): return [G, 'chest', 'head']
+    if group == 'shoulders' or re.search(r'teres|infraspinatus|supraspinatus|coracobrachialis', n): return [G, UA]
+    if group == 'chest': return ['chest', UA, G]
+    if re.search(r'latissimus', n): return ['chest', 'pelvis', UA]
+    if re.search(r'rhomboid|serratus|pectoralis minor', n): return ['chest', G]
+    if group == 'traps': return ['chest', G, 'head']
+    if group in ('abs', 'lowerback'): return ['pelvis', 'chest']
+    if group in ('biceps', 'triceps'): return [UA, FA]
+    if group == 'forearms': return [FA, UA, HAND]
+    if group == 'glutes' or re.search(r'tensor fasciae', n): return ['pelvis', TH]
+    if group in ('quads', 'hamstrings') or re.search(r'sartorius|gracilis|adductor', n): return [TH, SH, 'pelvis']
+    if group == 'calves' or re.search(r'tibialis|fibularis|peroneus|extensor digitorum longus|extensor hallucis longus', n): return [SH, TH, FOOT]
+    return ['chest']
 
 def seg_dist(p, a, b):
     ab = b - a
@@ -87,8 +102,9 @@ ratio = min(1.0, args.budget / total)
 print(f'source triangles {total}, keep ratio {ratio:.3f}', file=sys.stderr)
 
 ORDER = ['chest', 'shoulders', 'biceps', 'triceps', 'forearms', 'abs', 'lats', 'traps', 'lowerback', 'glutes', 'quads', 'hamstrings', 'calves', 'muscle', 'bone']
-items = sorted(meta['parts'].items(), key=lambda kv: (ORDER.index(kv[1]['group']), kv[0]))
+items = sorted(meta['parts'].items(), key=lambda kv: (ORDER.index(kv[1]['group']), kv[1].get('head', ''), kv[0]))
 P, I, SI, SW, groups = [], [], [], [], []
+anchors = {}
 base = 0
 for pid, info in items:
     v = (data[f'{pid}__v'] - origin) * s
@@ -112,10 +128,17 @@ for pid, info in items:
         idx[:, k] = BI[b]; wt[:, k] = w[:, k]
     wq = np.round(wt * 255).astype(np.int32)
     wq[:, 0] += 255 - wq.sum(axis=1)
-    if groups and groups[-1]['group'] == info['group']:
+    key = info.get('head') or info['group']
+    if groups and groups[-1]['group'] == key:
         groups[-1]['count'] += len(f) * 3
     else:
-        groups.append({'group': info['group'], 'start': sum(len(x) for x in I) * 3, 'count': len(f) * 3})
+        groups.append({'group': key, 'start': sum(len(x) for x in I) * 3, 'count': len(f) * 3})
+    # Anchor for the "feel it here" tag: centroid of the athlete's right-side part, with its main bone.
+    if info['side'] >= 0 and info['group'] not in ('bone', 'muscle'):
+        acc = anchors.setdefault(key, {'sum': np.zeros(3), 'n': 0, 'bones': {}})
+        acc['sum'] += v.sum(axis=0); acc['n'] += len(v)
+        for k, b in enumerate(bones[:4]):
+            acc['bones'][b] = acc['bones'].get(b, 0) + float(w[:, k].sum())
     P.append(v); I.append(f + base); SI.append(idx); SW.append(wq.astype(np.uint8))
     base += len(v)
 
@@ -135,6 +158,8 @@ manifest = {
     'vertexCount': int(len(P)), 'indexCount': int(I.size), 'indexType': index_type, 'quant': Q,
     'groups': groups, 'bones': BONES, 'rest': {b: frame(b) for b in BONES},
     'joints': {k: v.tolist() for k, v in J.items()}, 'floorY': floor_y,
+    'anchors': {k: {'c': (a['sum'] / a['n']).tolist(), 'bone': max(a['bones'], key=a['bones'].get)} for k, a in anchors.items()},
+    'waist': WAIST, 'sc': J['sc1'].tolist(),
     'lengths': {'torso': TORSO, 'upperArm': L('shoulder1', 'elbow1'), 'forearm': L('elbow1', 'wrist1'), 'hand': L('wrist1', 'hand1'),
                 'thigh': L('hip1', 'knee1'), 'shin': L('knee1', 'ankle1'), 'foot': L('ankle1', 'toe1'), 'head': L('neck', 'head'),
                 'shoulderZ': abs(J['shoulder1'][2]), 'hipZ': abs(J['hip1'][2]), 'kneeZ': abs(J['knee1'][2]), 'ankleZ': abs(J['ankle1'][2])},

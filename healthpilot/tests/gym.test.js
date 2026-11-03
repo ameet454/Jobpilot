@@ -164,8 +164,16 @@ describe('3-D anatomy rig', async () => {
       expect(rigBones.has(b), b).toBe(true);
     }
     expect(anatomy.credit).toMatch(/BodyParts3D.*Database Center for Life Science.*Share Alike 2\.1 Japan/);
-    const groups = new Set(anatomy.groups.map((g) => g.group));
-    for (const m of Object.keys(MUSCLES)) expect(groups.has(m), m).toBe(true);
+    const groups = anatomy.groups.map((g) => g.group);
+    for (const m of Object.keys(MUSCLES)) expect(groups.some((g) => g.split('.')[0] === m), m).toBe(true);
+    // Every head an exercise points at exists in the model, and gets an anchor for the label.
+    for (const ex of EXERCISES) {
+      for (const key of [...ex.focus, ...ex.helpers]) {
+        expect(groups.some((g) => g === key || g.split('.')[0] === key), `${ex.id}: ${key}`).toBe(true);
+      }
+      const f = ex.focus[0];
+      expect(Object.keys(anatomy.anchors).some((a) => a === f || a.split('.')[0] === f), `${ex.id} anchor`).toBe(true);
+    }
   });
 
   it('every bone frame is orthonormal in every frame of every exercise', () => {

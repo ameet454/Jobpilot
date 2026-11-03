@@ -502,7 +502,8 @@ export const EXERCISES = [
     noFloor: true,
     props: [{ t: 'line', pts: [[100, 12], [220, 12]], w: 6, kind: 'bar' }],
     A: { anchor: 'hand', at: [150, 12], torso: -90, head: 0, ua: -90, fa: -90, th: 90, sh: 90, foot: 30 },
-    B: { anchor: 'hand', at: [150, 12], torso: -98, head: 0, ua: -90, fa: -90, th: 5, sh: 5, foot: -60 },
+    // The pelvis curls up under the ribs (spine flexes), not just the legs.
+    B: { anchor: 'hand', at: [150, 12], torso: -62, spine: -30, head: 0, ua: -90, fa: -90, th: 5, sh: 5, foot: -60 },
   },
   {
     id: 'crunch', name: 'Crunch', equipment: 'Mat', level: 'Beginner',
@@ -518,10 +519,79 @@ export const EXERCISES = [
     breathe: 'Out as you curl up, in as you lower.',
     alts: ['hanging-leg-raise', 'plank'],
     props: [],
-    A: { at: [170, 226], torso: 182, head: 0, ua: 0, fa: 180, th: -55, sh: 60, foot: 0 },
-    B: { at: [170, 226], torso: 210, head: -15, ua: 20, fa: 180, th: -55, sh: 60, foot: 0 },
+    A: { at: [170, 226], torso: 182, spine: 0, head: 0, ua: 0, fa: 180, th: -55, sh: 60, foot: 0 },
+    // The lower back stays down; only the upper back curls.
+    B: { at: [170, 226], torso: 186, spine: 34, head: -12, ua: 20, fa: 180, th: -55, sh: 60, foot: 0 },
   },
 ];
+
+/**
+ * Exact muscle heads: `focus` glows red (where the stress should be), `helpers`
+ * glow orange. An entry without a dot means the whole muscle. Weekly set counts
+ * still use the muscle-level `primary` / `secondary` lists above.
+ */
+export const HEAD_LABEL = {
+  'chest.upper': 'Upper chest', 'chest.mid': 'Middle chest', 'chest.lower': 'Lower chest',
+  'shoulders.front': 'Front delts', 'shoulders.side': 'Side delts', 'shoulders.rear': 'Rear delts',
+  'traps.upper': 'Upper traps', 'traps.mid': 'Middle traps', 'traps.lower': 'Lower traps',
+  'lats.lats': 'Lats', 'lats.rhomboids': 'Rhomboids', 'lats.teres': 'Teres major', 'lats.rotators': 'Rotator cuff',
+  'biceps.biceps': 'Biceps', 'biceps.brachialis': 'Brachialis', 'triceps.long': 'Triceps long head', 'triceps.short': 'Triceps outer heads',
+  'forearms.brachioradialis': 'Brachioradialis', 'forearms.flexors': 'Forearm flexors', 'forearms.extensors': 'Forearm extensors',
+  'abs.rectus': 'Six-pack (rectus abdominis)', 'abs.obliques': 'Obliques',
+  'quads.rf': 'Rectus femoris', 'quads.outer': 'Outer quad', 'quads.inner': 'Inner quad (teardrop)',
+  'glutes.max': 'Gluteus maximus', 'glutes.med': 'Gluteus medius',
+  'calves.gastroc': 'Gastrocnemius', 'calves.soleus': 'Soleus', hamstrings: 'Hamstrings', lowerback: 'Lower back',
+};
+export const headLabel = (key) => HEAD_LABEL[key] || MUSCLES[key.split('.')[0]]?.label || key;
+
+const EMPHASIS = {
+  'bench-press': { focus: ['chest.mid', 'chest.lower'], helpers: ['chest.upper', 'shoulders.front', 'triceps'] },
+  'incline-db-press': { focus: ['chest.upper'], helpers: ['chest.mid', 'shoulders.front', 'triceps'] },
+  'push-up': { focus: ['chest.mid', 'chest.lower'], helpers: ['chest.upper', 'shoulders.front', 'triceps', 'abs.rectus'] },
+  'cable-fly': { focus: ['chest.mid', 'chest.lower'], helpers: ['chest.upper', 'shoulders.front'] },
+  dips: { focus: ['triceps', 'chest.lower'], helpers: ['chest.mid', 'shoulders.front'] },
+  'lat-pulldown': { focus: ['lats.lats', 'lats.teres'], helpers: ['lats.rhomboids', 'traps.lower', 'biceps', 'shoulders.rear', 'forearms.flexors'] },
+  'pull-up': { focus: ['lats.lats', 'lats.teres'], helpers: ['lats.rhomboids', 'traps.lower', 'biceps', 'forearms.flexors'] },
+  'barbell-row': { focus: ['lats.lats', 'lats.rhomboids', 'traps.mid'], helpers: ['lats.teres', 'shoulders.rear', 'biceps', 'lowerback'] },
+  'seated-cable-row': { focus: ['lats.rhomboids', 'traps.mid', 'lats.lats'], helpers: ['shoulders.rear', 'biceps', 'lats.teres'] },
+  deadlift: { focus: ['glutes.max', 'hamstrings', 'lowerback'], helpers: ['quads', 'traps.upper', 'forearms.flexors', 'lats.lats'] },
+  'overhead-press': { focus: ['shoulders.front', 'shoulders.side'], helpers: ['triceps', 'traps.upper', 'chest.upper', 'abs'] },
+  'lateral-raise': { focus: ['shoulders.side'], helpers: ['shoulders.front', 'shoulders.rear', 'traps.upper'] },
+  'face-pull': { focus: ['shoulders.rear'], helpers: ['traps.mid', 'lats.rhomboids', 'lats.rotators'] },
+  'barbell-curl': { focus: ['biceps.biceps'], helpers: ['biceps.brachialis', 'forearms.flexors'] },
+  'hammer-curl': { focus: ['biceps.brachialis', 'forearms.brachioradialis'], helpers: ['biceps.biceps'] },
+  'triceps-pushdown': { focus: ['triceps.short'], helpers: ['triceps.long'] },
+  'overhead-triceps': { focus: ['triceps.long'], helpers: ['triceps.short'] },
+  'back-squat': { focus: ['quads', 'glutes.max'], helpers: ['hamstrings', 'lowerback', 'abs', 'glutes.med'] },
+  'leg-press': { focus: ['quads', 'glutes.max'], helpers: ['hamstrings'] },
+  'romanian-deadlift': { focus: ['hamstrings', 'glutes.max'], helpers: ['lowerback', 'forearms.flexors'] },
+  'walking-lunge': { focus: ['quads', 'glutes.max'], helpers: ['glutes.med', 'hamstrings', 'calves'] },
+  'leg-curl': { focus: ['hamstrings'], helpers: ['calves.gastroc'] },
+  'leg-extension': { focus: ['quads'], helpers: [] },
+  'calf-raise': { focus: ['calves.gastroc', 'calves.soleus'], helpers: [] },
+  'hip-thrust': { focus: ['glutes.max'], helpers: ['glutes.med', 'hamstrings', 'quads'] },
+  plank: { focus: ['abs.rectus', 'abs.obliques'], helpers: ['shoulders.front', 'glutes.max', 'quads.rf'] },
+  'hanging-leg-raise': { focus: ['abs.rectus'], helpers: ['abs.obliques', 'forearms.flexors', 'quads.rf'] },
+  crunch: { focus: ['abs.rectus'], helpers: ['abs.obliques'] },
+};
+for (const ex of EXERCISES) Object.assign(ex, EMPHASIS[ex.id] || { focus: ex.primary, helpers: ex.secondary });
+
+/**
+ * Layers that lie over another head in the anatomy: when the head underneath is
+ * the focus, the covering layer is drawn see-through so the red is visible.
+ */
+export const COVERS = { 'abs.obliques': 'abs.rectus' };
+export const seeThrough = (ex, key) => !!COVERS[key] && ex.focus.includes(COVERS[key]) && !ex.focus.includes(key);
+
+/** 'primary' (red), 'secondary' (orange) or 'muscle' (resting) for an anatomy group like 'chest.upper'. */
+export function headRole(ex, key) {
+  if (key === 'bone' || key === 'muscle') return key;
+  const m = key.split('.')[0];
+  const hit = (list) => list.some((x) => x === key || x === m);
+  if (hit(ex.focus)) return 'primary';
+  if (hit(ex.helpers)) return 'secondary';
+  return 'muscle';
+}
 
 export const EXERCISE_BY_ID = Object.fromEntries(EXERCISES.map((e) => [e.id, e]));
 

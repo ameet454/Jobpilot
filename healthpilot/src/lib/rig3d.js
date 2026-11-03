@@ -7,7 +7,7 @@
  * x axis onto Z instead. The result is plain arrays so it can be unit-tested
  * without WebGL.
  */
-import { blendPose, frontJoints, solvePose } from './pose.js';
+import { blendPose, frontJoints, solvePose, WAIST } from './pose.js';
 
 export const FLOOR_Y = 241;
 // Half-widths measured from the BodyParts3D skeleton (same scale as pose.js LEN).
@@ -49,17 +49,36 @@ function front2d(seg, a, b, prone) {
  * Joint positions and bone frames for exercise `ex` at blend `t` (0 = pose A, 1 = pose B).
  * `ox` re-centres the athlete on the X axis.
  */
+// Sternoclavicular joint (the shoulder girdle's pivot) relative to the centre of
+// the shoulder line: forward, up and sideways, measured from the BodyParts3D clavicles.
+const SC_OFFSET = [6.7, 0.8, 1.5];
+// Scapulohumeral rhythm, simplified: past 30° of arm elevation the collarbone and
+// shoulder blade turn upward by ~0.18° per degree, up to 22°.
+const girdleAngle = (armElevation) => Math.max(0, Math.min(22, (armElevation - 30) * 0.18));
+
+/** Rotate vector p about unit axis k by `deg` degrees (Rodrigues). */
+function rotateAbout(p, k, deg) {
+  const a = (deg * Math.PI) / 180; const c = Math.cos(a); const sn = Math.sin(a);
+  return v.add(v.add(v.mul(p, c), v.mul(v.cross(k, p), sn)), v.mul(k, v.dot(k, p) * (1 - c)));
+}
+
+/**
+ * Joint positions and bone frames for exercise `ex` at blend `t` (0 = pose A, 1 = pose B).
+ * `ox` re-centres the athlete on the X axis.
+ */
 export function rig(ex, t, ox = 150) {
   const p = blendPose(ex.A, ex.B, t);
   const W = (pt, z) => [pt[0] - ox, FLOOR_Y - pt[1], z];
-  const bones = [];
   const J = {};
+  const hint = {}; // front direction per limb bone, e.g. hint['ua1']
+  let lowerF; let upperF;
 
   if (ex.view === 'front') {
     const j = frontJoints(p);
     const reach = p.reach ?? 0;
     const F = (pt, x = 0) => [x, FLOOR_Y - pt[1], pt[0] - j.cx];
     J.hip = F(j.hip); J.neck = F(j.neck); J.head = F(j.head);
+    J.waist = v.lerp(J.hip, J.neck, WAIST);
     for (const [s, k] of [[1, 'R'], [-1, 'L']]) {
       J[`shoulder${s}`] = F(j[`sh${k}`]);
       J[`elbow${s}`] = F(j[`elbow${k}`], reach * 0.6);
@@ -68,39 +87,66 @@ export function rig(ex, t, ox = 150) {
       J[`knee${s}`] = F(j[`knee${k}`]);
       J[`ankle${s}`] = F(j[`ankle${k}`]);
       J[`toe${s}`] = v.add(F(j[`ankle${k}`]), [13, -3, 0]);
+      for (const b of ['ua', 'fa', 'th', 'sh']) hint[`${b}${s}`] = [1, 0, 0];
     }
-    const fwd = [1, 0, 0];
-    bones.push({ key: 'torso', side: 0, a: J.hip, b: J.neck, ...frame(J.hip, J.neck, fwd) });
-    for (const s of [1, -1]) {
-      bones.push({ key: 'ua', side: s, a: J[`shoulder${s}`], b: J[`elbow${s}`], ...frame(J[`shoulder${s}`], J[`elbow${s}`], fwd) });
-      bones.push({ key: 'fa', side: s, a: J[`elbow${s}`], b: J[`hand${s}`], ...frame(J[`elbow${s}`], J[`hand${s}`], fwd) });
-      bones.push({ key: 'th', side: s, a: J[`hip${s}`], b: J[`knee${s}`], ...frame(J[`hip${s}`], J[`knee${s}`], fwd) });
-      bones.push({ key: 'sh', side: s, a: J[`knee${s}`], b: J[`ankle${s}`], ...frame(J[`knee${s}`], J[`ankle${s}`], fwd) });
-      bones.push({ key: 'foot', side: s, a: J[`ankle${s}`], b: J[`toe${s}`], ...frame(J[`ankle${s}`], J[`toe${s}`], [0, 1, 0]) });
+    lowerF = [1, 0, 0]; upperF = [1, 0, 0];
+  } else {
+    const j = solvePose(p);
+    J.hip = W(j.hip, 0); J.waist = W(j.waist, 0); J.neck = W(j.neck, 0); J.head = W(j.head, 0);
+    lowerF = front2d('torso', j.hip, j.waist, ex.prone);
+    upperF = front2d('torso', j.waist, j.neck, ex.prone);
+    // +1 = the athlete's right side (nearest the default camera), -1 = left.
+    for (const [s, src] of [[1, j], [-1, j.far]]) {
+      J[`shoulder${s}`] = W(j.neck, s * Z_SHOULDER);
+      J[`elbow${s}`] = W(src.elbow, s * Z_SHOULDER);
+      J[`hand${s}`] = W(src.hand, s * (Z_SHOULDER + 1));
+      J[`hip${s}`] = W(j.hip, s * Z_HIP);
+      J[`knee${s}`] = W(src.knee, s * Z_KNEE);
+      J[`ankle${s}`] = W(src.ankle, s * Z_ANKLE);
+      J[`toe${s}`] = W(src.toe, s * Z_ANKLE);
+      hint[`ua${s}`] = front2d('ua', j.neck, src.elbow, ex.prone);
+      hint[`fa${s}`] = front2d('fa', src.elbow, src.hand, ex.prone);
+      hint[`th${s}`] = front2d('th', j.hip, src.knee, ex.prone);
+      hint[`sh${s}`] = front2d('sh', src.knee, src.ankle, ex.prone);
     }
-    return { J, bones };
   }
 
-  const j = solvePose(p);
-  J.hip = W(j.hip, 0); J.neck = W(j.neck, 0); J.head = W(j.head, 0);
-  const tf = front2d('torso', j.hip, j.neck, ex.prone);
-  bones.push({ key: 'torso', side: 0, a: J.hip, b: J.neck, ...frame(J.hip, J.neck, tf) });
-  // +1 = the athlete's right side (nearest the default camera), -1 = left.
-  for (const [s, src] of [[1, j], [-1, j.far]]) {
-    J[`shoulder${s}`] = W(j.neck, s * Z_SHOULDER);
-    J[`elbow${s}`] = W(src.elbow, s * Z_SHOULDER);
-    J[`hand${s}`] = W(src.hand, s * (Z_SHOULDER + 1));
-    J[`hip${s}`] = W(j.hip, s * Z_HIP);
-    J[`knee${s}`] = W(src.knee, s * Z_KNEE);
-    J[`ankle${s}`] = W(src.ankle, s * Z_ANKLE);
-    J[`toe${s}`] = W(src.toe, s * Z_ANKLE);
-    const seg = (key, a2, b2, a3, b3) => bones.push({ key, side: s, a: a3, b: b3, ...frame(a3, b3, front2d(key, a2, b2, ex.prone)) });
-    seg('ua', j.neck, src.elbow, J[`shoulder${s}`], J[`elbow${s}`]);
-    seg('fa', src.elbow, src.hand, J[`elbow${s}`], J[`hand${s}`]);
-    seg('th', j.hip, src.knee, J[`hip${s}`], J[`knee${s}`]);
-    seg('sh', src.knee, src.ankle, J[`knee${s}`], J[`ankle${s}`]);
+  // Shoulder girdle: the collarbone pivots at the sternum and lifts the shoulder as the arm rises.
+  const chest = frame(J.waist, J.neck, upperF);
+  const delta = {};
+  for (const s of [1, -1]) {
+    const sc = v.add(v.add(v.add(J.neck, v.mul(chest.f, SC_OFFSET[0])), v.mul(chest.u, SC_OFFSET[1])), [0, 0, s * SC_OFFSET[2]]);
+    const sh0 = J[`shoulder${s}`];
+    const arm = v.norm(v.sub(J[`elbow${s}`], sh0));
+    const elevation = (Math.acos(Math.max(-1, Math.min(1, -v.dot(arm, chest.u)))) * 180) / Math.PI;
+    const sh1 = v.add(sc, rotateAbout(v.sub(sh0, sc), chest.f, -s * girdleAngle(elevation)));
+    J[`sc${s}`] = sc;
+    delta[s] = v.sub(sh1, sh0);
+  }
+  if (p.anchor === 'hand' && ex.view !== 'front') {
+    // Hands stay on the bar: the body hangs lower instead of the hands rising.
+    const m = v.mul(v.add(delta[1], delta[-1]), 0.5);
+    for (const k of Object.keys(J)) if (!/^(elbow|hand)/.test(k)) J[k] = v.sub(J[k], m);
+    for (const s of [1, -1]) J[`shoulder${s}`] = v.add(J[`shoulder${s}`], delta[s]);
+  } else {
+    for (const s of [1, -1]) for (const k of ['shoulder', 'elbow', 'hand']) J[`${k}${s}`] = v.add(J[`${k}${s}`], delta[s]);
+  }
+
+  const bones = [
+    { key: 'torso', side: 0, a: J.hip, b: J.neck, ...frame(J.hip, J.neck, upperF) },
+    { key: 'pelvis', side: 0, a: J.hip, b: J.waist, ...frame(J.hip, J.waist, lowerF) },
+    { key: 'chest', side: 0, a: J.waist, b: J.neck, ...frame(J.waist, J.neck, upperF) },
+  ];
+  const fc = frame(J.waist, J.neck, upperF).f;
+  for (const s of [1, -1]) {
+    const add = (key, a, b, h) => bones.push({ key, side: s, a, b, ...frame(a, b, h) });
+    add('girdle', J[`sc${s}`], J[`shoulder${s}`], fc);
+    add('ua', J[`shoulder${s}`], J[`elbow${s}`], hint[`ua${s}`]);
+    add('fa', J[`elbow${s}`], J[`hand${s}`], hint[`fa${s}`]);
+    add('th', J[`hip${s}`], J[`knee${s}`], hint[`th${s}`]);
+    add('sh', J[`knee${s}`], J[`ankle${s}`], hint[`sh${s}`]);
     // The top of the foot faces back up the shin.
-    bones.push({ key: 'foot', side: s, a: J[`ankle${s}`], b: J[`toe${s}`], ...frame(J[`ankle${s}`], J[`toe${s}`], v.sub(J[`knee${s}`], J[`ankle${s}`])) });
+    add('foot', J[`ankle${s}`], J[`toe${s}`], ex.view === 'front' ? [0, 1, 0] : v.sub(J[`knee${s}`], J[`ankle${s}`]));
   }
   return { J, bones };
 }

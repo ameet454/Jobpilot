@@ -2,9 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { BACK_MUSCLES, JOINT_LABEL, muscleAnchor, muscles, rig, v, workingJoints } from '../lib/rig3d.js';
-import { ANATOMY_CREDIT, buildAnatomy, loadAnatomy, poseAnatomy } from './anatomyModel.js';
+import { ANATOMY_CREDIT, anatomyAnchor, buildAnatomy, loadAnatomy, poseAnatomy } from './anatomyModel.js';
 import { repPhase, STAGE_LOAD } from '../lib/pose.js';
-import { MUSCLES } from '../data/exercises.js';
+import { headLabel, headRole, seeThrough } from '../data/exercises.js';
 import { cuesFor } from '../data/coaching.js';
 import ExerciseFigure, { MUSCLE_COLOR } from './ExerciseFigure.jsx';
 
@@ -17,7 +17,7 @@ const SPHERE = new THREE.SphereGeometry(1, 28, 20);
 const UNIT_CYL = (r0, r1) => new THREE.CylinderGeometry(r1, r0, 1, 20, 1);
 
 
-function makeMaterials(dark) {
+export function makeMaterials(dark) {
   return {
     // Resting muscles in a soft anatomical tone, bones in ivory; only the
     // working muscles get strong colour.
@@ -25,6 +25,7 @@ function makeMaterials(dark) {
     bone: new THREE.MeshStandardMaterial({ color: '#ece4d2', roughness: 0.7 }),
     primary: new THREE.MeshStandardMaterial({ color: '#ff2b2b', emissive: '#ff0000', emissiveIntensity: 0.5, roughness: 0.4 }),
     secondary: new THREE.MeshStandardMaterial({ color: '#ff9f1c', emissive: '#ff7300', emissiveIntensity: 0.25, roughness: 0.45 }),
+    veil: new THREE.MeshStandardMaterial({ color: '#ffb35c', roughness: 0.5, transparent: true, opacity: 0.22, depthWrite: false }),
     iron: new THREE.MeshStandardMaterial({ color: '#2b3038', roughness: 0.35, metalness: 0.6 }),
     steel: new THREE.MeshStandardMaterial({ color: '#c9ced6', roughness: 0.25, metalness: 0.9 }),
     pad: new THREE.MeshStandardMaterial({ color: dark ? '#3c4552' : '#4a5563', roughness: 0.8 }),
@@ -33,7 +34,7 @@ function makeMaterials(dark) {
 }
 
 /** Equipment. Returns an update(R) function that moves the pieces that follow the body. */
-function buildProps(group, ex, mat, ox) {
+export function buildProps(group, ex, mat, ox) {
   const updates = [];
   const zOf = (R) => Math.abs(R.J.hand1[2]);
   for (const p of ex.props) {
@@ -117,7 +118,7 @@ function loadPoint(ex, R) {
   return v.lerp(R.J.hand1, R.J['hand-1'], 0.5);
 }
 
-function framing(ex) {
+export function framing(ex) {
   const pts = [];
   for (const t of [0, 0.5, 1]) { const R = rig(ex, t, 0); pts.push(...Object.values(R.J)); }
   const min = [0, 1, 2].map((i) => Math.min(...pts.map((p) => p[i])));
@@ -126,12 +127,17 @@ function framing(ex) {
   return { ox, cy: (min[1] + max[1]) / 2, size: Math.max(max[0] - min[0], max[1] - min[1], 90) };
 }
 
-function defaultView(ex) {
+export function defaultView(ex) {
   const lying = Math.abs(Math.sin((ex.A.torso * Math.PI) / 180)) < 0.6;
-  const back = BACK_MUSCLES.has(ex.primary[0]);
+  const f0 = ex.focus[0];
+  const back = BACK_MUSCLES.has(f0.split('.')[0]) || f0 === 'shoulders.rear';
   if (lying) return { az: back ? 120 : 60, el: 52 };
   return { az: ex.view === 'front' ? 20 : back ? 140 : 42, el: 12 };
 }
+
+// Phones with few cores or little memory get no antialiasing, no soft shadows and a lower resolution.
+const LOW_END = typeof navigator !== 'undefined'
+  && ((navigator.hardwareConcurrency || 8) <= 4 || (navigator.deviceMemory || 8) <= 3);
 
 function webglOk() {
   try { const c = document.createElement('canvas'); return !!(c.getContext('webgl2') || c.getContext('webgl')); } catch { return false; }
@@ -165,13 +171,13 @@ export default function Exercise3D({ ex }) {
       || (document.documentElement.dataset.theme !== 'light' && window.matchMedia?.('(prefers-color-scheme: dark)').matches);
     let renderer;
     try {
-      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+      renderer = new THREE.WebGLRenderer({ antialias: !LOW_END, alpha: true, powerPreference: LOW_END ? 'low-power' : 'default' });
     } catch {
       setFailed(true);
       return undefined;
     }
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-    renderer.shadowMap.enabled = true;
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, LOW_END ? 1.25 : 2));
+    renderer.shadowMap.enabled = !LOW_END;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     el.prepend(renderer.domElement);
@@ -202,13 +208,12 @@ export default function Exercise3D({ ex }) {
     }
 
     const group = new THREE.Group(); scene.add(group);
-    const roleOf = (m) => (m === 'bone' ? 'bone' : ex.primary.includes(m) ? 'primary' : ex.secondary.includes(m) ? 'secondary' : 'muscle');
     let anatomy = null;
     let disposed = false;
     loadAnatomy()
       .then((data) => {
         if (disposed) return;
-        anatomy = buildAnatomy(data, (g) => mat[roleOf(g)]);
+        anatomy = buildAnatomy(data, (g) => (seeThrough(ex, g) ? mat.veil : mat[headRole(ex, g)]));
         group.add(anatomy.mesh);
         setLoading(false);
       })
@@ -260,12 +265,17 @@ export default function Exercise3D({ ex }) {
       window.speechSynthesis.speak(u);
     };
 
-    const anchorMuscle = ex.primary[0];
+    const anchorHead = ex.focus[0];
     const st = { clock: 0, last: null, rep: 0, prev: null, tip: 0, lastUi: 0, prevLoad: null, banner: 0 };
     const proj = new THREE.Vector3();
     let raf;
+    // Skip work while the viewer is scrolled away or the tab is hidden.
+    let onScreen = true;
+    const io = new IntersectionObserver(([e]) => { onScreen = e.isIntersecting; });
+    io.observe(el);
     const loop = (now) => {
       raf = requestAnimationFrame(loop);
+      if (!onScreen || document.hidden) { st.last = null; return; }
       const dt = st.last == null ? 0 : Math.min(100, now - st.last);
       st.last = now;
       if (ctl.current.playing) st.clock += dt * ctl.current.speed;
@@ -329,7 +339,7 @@ export default function Exercise3D({ ex }) {
       renderer.render(scene, camera);
 
       // Pin the "feel it here" label to the working muscle.
-      const a = muscleAnchor(muscles(R), anchorMuscle);
+      const a = (anatomy && anatomyAnchor(anatomy, anchorHead)) || muscleAnchor(muscles(R), anchorHead.split('.')[0]);
       if (a && label.current) {
         proj.set(...a).project(camera);
         const w = renderer.domElement.clientWidth; const h = renderer.domElement.clientHeight;
@@ -344,6 +354,7 @@ export default function Exercise3D({ ex }) {
       disposed = true;
       cancelAnimationFrame(raf);
       ro.disconnect();
+      io.disconnect();
       controls.dispose();
       window.speechSynthesis?.cancel();
       scene.traverse((o) => { if (o.geometry && o.geometry !== SPHERE) o.geometry.dispose(); });
@@ -365,7 +376,7 @@ export default function Exercise3D({ ex }) {
         {ui.stage && <div className={`t-stage ${stageCls}`}>{STAGE_TITLE[ui.stage]} <span>{ui.left.toFixed(1)}s</span></div>}
         <div className="t-label" ref={label} aria-hidden="true">
           <span className="t-dot" />
-          <span className="t-tag">Feel it here · {MUSCLES[ex.primary[0]].label}</span>
+          <span className="t-tag">Feel it here · {headLabel(ex.focus[0])}</span>
         </div>
         {ui.done && <div className="t-banner">💪 Set complete! Rest 60–90 s</div>}
         {loading && <div className="t-loading">Loading anatomy…</div>}

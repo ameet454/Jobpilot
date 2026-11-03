@@ -95,3 +95,17 @@ export function poseAnatomy({ skeleton, meta }, R) {
     bone.matrixWorld.copy(tmp);
   }
 }
+
+const tmpV = new THREE.Vector3();
+/**
+ * Current world position of a muscle head (e.g. 'chest.upper'), or of the first
+ * head of a muscle ('hamstrings'), on the athlete's right side.
+ */
+export function anatomyAnchor({ skeleton, meta }, key) {
+  const k = meta.anchors[key] ? key : Object.keys(meta.anchors).find((a) => a.split('.')[0] === key.split('.')[0]);
+  const a = k && meta.anchors[k];
+  if (!a) return null;
+  const i = meta.bones.indexOf(a.bone);
+  tmpV.set(...a.c).applyMatrix4(skeleton.boneInverses[i]).applyMatrix4(skeleton.bones[i].matrixWorld);
+  return tmpV.toArray();
+}

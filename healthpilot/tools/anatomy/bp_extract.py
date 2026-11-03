@@ -71,6 +71,28 @@ BONE_RULES = [
     r'^(frontal bone|occipital bone|mandible|sphenoid bone|vomer)$', r'(right|left) (parietal bone|temporal bone|zygomatic bone|maxilla|nasal bone)$',
 ]
 
+# Finer muscle heads, so an exercise can light up e.g. the upper chest only.
+HEADS = [
+    (r'clavicular part of pectoralis', 'chest.upper'), (r'sternocostal part of pectoralis', 'chest.mid'), (r'abdominal part of pectoralis', 'chest.lower'),
+    (r'clavicular part of deltoid', 'shoulders.front'), (r'acromial part of deltoid', 'shoulders.side'), (r'spinal part of deltoid', 'shoulders.rear'),
+    (r'descending part of trapezius|levator scapulae', 'traps.upper'), (r'transverse part of trapezius', 'traps.mid'), (r'ascending part of trapezius', 'traps.lower'),
+    (r'latissimus', 'lats.lats'), (r'rhomboid', 'lats.rhomboids'), (r'teres major', 'lats.teres'), (r'infraspinatus|teres minor', 'lats.rotators'),
+    (r'biceps brachii', 'biceps.biceps'), (r'brachialis', 'biceps.brachialis'),
+    (r'long head of triceps', 'triceps.long'), (r'triceps|anconeus', 'triceps.short'),
+    (r'brachioradialis', 'forearms.brachioradialis'), (r'flexor|palmaris|pronator', 'forearms.flexors'), (r'extensor|abductor pollicis', 'forearms.extensors'),
+    (r'rectus abdominis', 'abs.rectus'), (r'oblique', 'abs.obliques'),
+    (r'rectus femoris', 'quads.rf'), (r'vastus lateralis', 'quads.outer'), (r'vastus medialis', 'quads.inner'),
+    (r'gastrocnemius', 'calves.gastroc'), (r'soleus', 'calves.soleus'),
+    (r'gluteus maximus', 'glutes.max'), (r'gluteus medius', 'glutes.med'),
+]
+
+def head_of(name, group):
+    plain = re.sub(r'(?:right|left) ', '', name)
+    for rx, h in HEADS:
+        if h.split('.')[0] == group and re.search(rx, plain):
+            return h
+    return group
+
 picked = {}
 for pid, name in names.items():
     if pid not in members:
@@ -96,7 +118,7 @@ for pid, (name, grp, side) in picked.items():
     v, f = load(pid)
     if len(f) == 0:
         continue
-    parts[pid] = dict(name=name, group=grp, side=side, v=v, f=f)
+    parts[pid] = dict(name=name, group=grp, head=head_of(name, grp), side=side, v=v, f=f)
 
 def bone(name):
     for p in parts.values():
@@ -142,6 +164,6 @@ print('lengths mm: torso %.0f  ua %.0f  fa %.0f  thigh %.0f  shin %.0f  foot %.0
 print('floor (min y) mm:', min(p['v'][:, 1].min() for p in parts.values()), file=sys.stderr)
 
 np.savez_compressed(args.out + '/parts.npz', **{f'{pid}__v': p['v'] for pid, p in parts.items()}, **{f'{pid}__f': p['f'] for pid, p in parts.items()})
-json.dump({'joints': {k: v.tolist() for k, v in J.items()}, 'parts': {pid: dict(name=p['name'], group=p['group'], side=p['side'], nv=len(p['v']), nf=len(p['f'])) for pid, p in parts.items()}},
+json.dump({'joints': {k: v.tolist() for k, v in J.items()}, 'parts': {pid: dict(name=p['name'], group=p['group'], head=p['head'], side=p['side'], nv=len(p['v']), nf=len(p['f'])) for pid, p in parts.items()}},
           open(args.out + '/joints.json', 'w'), indent=1)
 print('done', file=sys.stderr)

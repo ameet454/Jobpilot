@@ -11,10 +11,20 @@ python -m venv .venv && .venv/bin/pip install numpy==2.3.4 fast-simplification==
 cp work/anatomy.bin work/anatomy.json ../../public/anatomy/
 ```
 
+Then render the exercise thumbnails and the body-map images from the model:
+
+```bash
+node tools/anatomy/save-server.mjs          # writes into public/thumbs and public/anatomy
+npm run dev                                  # then open /tools/anatomy/render-assets.html
+```
+
+Bump `CACHE` in `public/sw.js` after regenerating, because these files are not content-hashed.
+
 `bp_extract.py` picks the muscles and bones, converts axes (BodyParts3D: x = left, y = posterior,
 z = up, mm → app: X = anterior, Y = up, Z = right) and measures the joint centres.
 `bp_build.py` scales to the app's torso length (66), welds and simplifies each part, binds every
-vertex to up to 4 of the rig's 14 bones and writes the packed mesh.
+vertex to up to 4 of the rig's 17 bones (pelvis, chest, head, and per side shoulder girdle,
+upper arm, forearm, hand, thigh, shin, foot) and writes the packed mesh.
 
 Licence of the derived data: CC BY-SA 2.1 JP — credit line
 "BodyParts3D, Copyright© The Database Center for Life Science licensed by CC Attribution-Share Alike 2.1 Japan".

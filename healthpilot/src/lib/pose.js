@@ -31,7 +31,14 @@ function leg(hip, th, sh, foot) {
   return { knee, ankle, toe: move(ankle, foot, LEN.foot) };
 }
 
+// The spine bends at the waist: `torso` aims the lower back (hip → waist) and
+// `torso + spine` the upper back (waist → neck). Positive spine curls forward.
+export const WAIST = 0.42;
+const LOWER = LEN.torso * WAIST;
+const UPPER = LEN.torso - LOWER;
+
 export function solvePose(p) {
+  const upper = p.torso + (p.spine ?? 0);
   let hip;
   if (p.anchor === 'ankle') {
     const knee = move(p.at, p.sh + 180, LEN.shin);
@@ -39,17 +46,18 @@ export function solvePose(p) {
   } else if (p.anchor === 'hand') {
     const elbow = move(p.at, p.fa + 180, LEN.forearm);
     const neck = move(elbow, p.ua + 180, LEN.upperArm);
-    hip = move(neck, p.torso + 180, LEN.torso);
+    hip = move(move(neck, upper + 180, UPPER), p.torso + 180, LOWER);
   } else {
     hip = p.at;
   }
-  const neck = move(hip, p.torso, LEN.torso);
+  const waist = move(hip, p.torso, LOWER);
+  const neck = move(waist, upper, UPPER);
   const near = { ...arm(neck, p.ua, p.fa, p.uaLen), ...leg(hip, p.th, p.sh, p.foot ?? 0) };
   const farArm = arm(neck, p.ua2 ?? p.ua, p.fa2 ?? p.fa, p.uaLen);
   const farLeg = leg(hip, p.th2 ?? p.th, p.sh2 ?? p.sh, p.foot2 ?? p.foot ?? 0);
   return {
-    hip, neck, ...near,
-    head: move(neck, p.torso + (p.head ?? 0), LEN.head),
+    hip, waist, neck, ...near,
+    head: move(neck, upper + (p.head ?? 0), LEN.head),
     far: { elbow: farArm.elbow, hand: farArm.hand, knee: farLeg.knee, ankle: farLeg.ankle, toe: farLeg.toe },
   };
 }
@@ -78,7 +86,7 @@ export function frontJoints(p) {
 }
 
 const lerp = (a, b, t) => a + (b - a) * t;
-const ANGLES = ['torso', 'head', 'ua', 'fa', 'th', 'sh', 'foot', 'ua2', 'fa2', 'th2', 'sh2', 'foot2', 'uaLen', 'reach'];
+const ANGLES = ['torso', 'spine', 'head', 'ua', 'fa', 'th', 'sh', 'foot', 'ua2', 'fa2', 'th2', 'sh2', 'foot2', 'uaLen', 'reach'];
 
 /** Blend two key poses (t = 0 → a, t = 1 → b). */
 export function blendPose(a, b, t) {

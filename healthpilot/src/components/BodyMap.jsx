@@ -1,99 +1,141 @@
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { MUSCLES } from '../data/exercises.js';
 import { MUSCLE_COLOR } from './ExerciseFigure.jsx';
 
 /*
- * Front and back body outlines made of simple shapes, one group per muscle.
- * Three modes:
- *   roles   { chest: 'primary', triceps: 'secondary' }  → red / orange like the animation
- *   heat    { chest: 0..1 }                              → weekly training heat map
- *   onPick  (muscle) => void                             → tap a muscle to filter
+ * Front and back views of the real anatomy (BodyParts3D), pre-rendered by
+ * tools/anatomy/render-assets.html as two images per view:
+ *   map-<view>-shade.webp  the lit body
+ *   map-<view>-id.png      each muscle head painted a flat code colour (red channel = index × step)
+ * Here every pixel is recoloured by what that muscle head means right now.
+ *
+ * Modes:
+ *   roles(key) => 'primary' | 'secondary' | …  red / orange, like the 3-D trainer
+ *   heat       { chest: 0..2 }                  weekly training heat map (sets ÷ 10)
+ *   selected + onPick(muscle)                   tap a muscle to filter
  */
-const E = (cx, cy, rx, ry, rot = 0) => ({ cx, cy, rx, ry, rot });
-const pair = (cx, cy, rx, ry, rot = 0) => [E(60 - cx, cy, rx, ry, -rot), E(60 + cx, cy, rx, ry, rot)];
+const BASE = `${import.meta.env.BASE_URL}anatomy/`;
+let assets = null;
 
-const FRONT = {
-  shoulders: pair(23, 52, 9, 10),
-  chest: pair(11, 63, 11, 8.5),
-  biceps: pair(29, 79, 5.5, 12, 8),
-  forearms: pair(34, 106, 5, 13, 10),
-  abs: [E(60, 92, 9, 20)],
-  quads: pair(10, 150, 8.5, 24, -3),
-  calves: pair(11, 201, 5.5, 15, -2),
-};
-const BACK = {
-  traps: [E(60, 54, 15, 8)],
-  shoulders: pair(23, 52, 9, 10),
-  lats: pair(12, 78, 9, 17, -12),
-  triceps: pair(29, 79, 5.5, 12, 8),
-  forearms: pair(34, 106, 5, 13, 10),
-  lowerback: [E(60, 104, 8, 9)],
-  glutes: pair(9, 128, 10, 10),
-  hamstrings: pair(10, 160, 8, 22, -3),
-  calves: pair(11, 199, 6.5, 15, -2),
-};
-
-function Silhouette() {
-  return (
-    <g className="bm-base">
-      <circle cx="60" cy="20" r="12" />
-      <rect x="54" y="30" width="12" height="10" rx="3" />
-      <path d="M36 44 Q60 36 84 44 L82 118 Q60 128 38 118 Z" />
-      {[-1, 1].map((s) => (
-        <g key={s} transform={s < 0 ? 'translate(120 0) scale(-1 1)' : undefined}>
-          <path d="M80 46 Q92 50 92 64 L96 120 Q94 124 88 122 L80 70 Z" />
-          <path d="M60 120 L82 118 L76 226 L66 226 Z" />
-        </g>
-      ))}
-    </g>
-  );
+function loadImage(src) {
+  return new Promise((ok, fail) => { const i = new Image(); i.onload = () => ok(i); i.onerror = fail; i.src = src; });
+}
+function pixels(img) {
+  const c = document.createElement('canvas'); c.width = img.width; c.height = img.height;
+  const g = c.getContext('2d', { willReadFrequently: true }); g.drawImage(img, 0, 0);
+  return g.getImageData(0, 0, c.width, c.height);
+}
+function loadAssets() {
+  if (!assets) {
+    assets = Promise.all([
+      fetch(`${BASE}map.json`).then((r) => r.json()),
+      ...['front', 'back'].flatMap((v) => [loadImage(`${BASE}map-${v}-shade.webp`), loadImage(`${BASE}map-${v}-id.png`)]),
+    ]).then(([meta, fs, fi, bs, bi]) => ({ meta, front: { shade: pixels(fs), id: pixels(fi) }, back: { shade: pixels(bs), id: pixels(bi) } }))
+      .catch((e) => { assets = null; throw e; });
+  }
+  return assets;
 }
 
-function View({ shapes, label, colorFor, onPick }) {
+const hex = (h) => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
+const RED = hex(MUSCLE_COLOR.primary);
+const ORANGE = hex(MUSCLE_COLOR.secondary);
+
+/**
+ * Heat colour for v = weekly sets ÷ 10: none (untrained) → blue (under 5 sets)
+ * → green (5–20 sets, deeper as it nears 10+) → red (over 20 sets).
+ */
+export function heatColor(v) {
+  if (!v) return null;
+  if (v < 0.5) return { rgb: [96, 165, 250], a: 0.55 + v };
+  if (v <= 2) return { rgb: [34, 197, 94], a: Math.min(1, 0.6 + 0.4 * v) };
+  return { rgb: [239, 68, 68], a: 0.9 };
+}
+
+function keyAt(view, meta, x, y) {
+  const { id } = view;
+  const i = (Math.floor(y) * id.width + Math.floor(x)) * 4;
+  if (id.data[i + 3] < 128) return null;
+  const k = Math.round(id.data[i] / meta.step) - 1;
+  return meta.keys[k] || null;
+}
+
+function View({ name, data, colorFor, onPick, label }) {
+  const canvas = useRef(null);
+  const [hover, setHover] = useState(null);
+  const view = data[name];
+
+  useEffect(() => {
+    const { shade, id } = view;
+    const out = new ImageData(shade.width, shade.height);
+    const cache = new Map();
+    for (let i = 0; i < shade.data.length; i += 4) {
+      const a = shade.data[i + 3];
+      out.data[i + 3] = a;
+      let r = shade.data[i]; let g = shade.data[i + 1]; let b = shade.data[i + 2];
+      if (a > 0 && id.data[i + 3] > 128) {
+        const k = Math.round(id.data[i] / data.meta.step) - 1;
+        const key = data.meta.keys[k];
+        if (key) {
+          if (!cache.has(key)) cache.set(key, colorFor(key, key.split('.')[0] === hover));
+          const c = cache.get(key);
+          if (c) {
+            // Tint keeps the muscle's shading: blend shade with (shade × colour).
+            const L = (r + g + b) / 765 * 1.25;
+            r += (Math.min(255, c.rgb[0] * L) - r) * c.a;
+            g += (Math.min(255, c.rgb[1] * L) - g) * c.a;
+            b += (Math.min(255, c.rgb[2] * L) - b) * c.a;
+          }
+        }
+      }
+      out.data[i] = r; out.data[i + 1] = g; out.data[i + 2] = b;
+    }
+    const cv = canvas.current;
+    cv.width = shade.width; cv.height = shade.height;
+    cv.getContext('2d').putImageData(out, 0, 0);
+  }, [view, colorFor, hover, data.meta]);
+
+  const at = (e) => {
+    const rect = canvas.current.getBoundingClientRect();
+    return keyAt(view, data.meta, ((e.clientX - rect.left) / rect.width) * view.id.width, ((e.clientY - rect.top) / rect.height) * view.id.height);
+  };
   return (
     <figure className="bm-view">
-      <svg viewBox="0 0 120 232" role="img" aria-label={`${label} view`}>
-        <Silhouette />
-        {Object.entries(shapes).map(([id, ells]) => {
-          const fill = colorFor(id);
-          return (
-            <g key={id} className={`bm-muscle ${onPick ? 'pickable' : ''}`} onClick={onPick ? () => onPick(id) : undefined}
-              role={onPick ? 'button' : undefined} aria-label={onPick ? MUSCLES[id].label : undefined} tabIndex={onPick ? 0 : undefined}
-              onKeyDown={onPick ? (e) => (e.key === 'Enter' || e.key === ' ') && onPick(id) : undefined}>
-              <title>{MUSCLES[id].label}</title>
-              {ells.map((e, i) => (
-                <ellipse key={i} cx={e.cx} cy={e.cy} rx={e.rx} ry={e.ry} transform={`rotate(${e.rot} ${e.cx} ${e.cy})`} style={{ fill: fill.color, opacity: fill.opacity }} />
-              ))}
-            </g>
-          );
-        })}
-      </svg>
-      <figcaption>{label}</figcaption>
+      <canvas
+        ref={canvas}
+        className={onPick ? 'pickable' : undefined}
+        role="img"
+        aria-label={`${label} view of the body`}
+        onClick={onPick ? (e) => { const k = at(e); if (k) onPick(k.split('.')[0]); } : undefined}
+        onPointerMove={onPick ? (e) => { const k = at(e); setHover(k ? k.split('.')[0] : null); } : undefined}
+        onPointerLeave={onPick ? () => setHover(null) : undefined}
+      />
+      <figcaption>{hover ? MUSCLES[hover]?.label : label}</figcaption>
     </figure>
   );
 }
 
-/**
- * Heat colour for v = weekly sets ÷ 10: grey (untrained) → blue (under 5 sets)
- * → green (5–20 sets, deeper green as it nears 10+) → red (over 20 sets).
- */
-export function heatColor(v) {
-  if (!v) return { color: 'var(--track)', opacity: 1 };
-  if (v < 0.5) return { color: '#60a5fa', opacity: 0.55 + v };
-  if (v <= 2) return { color: '#22c55e', opacity: Math.min(1, 0.6 + 0.4 * v) };
-  return { color: '#ef4444', opacity: 0.9 };
-}
-
 export default function BodyMap({ roles, heat, selected, onPick }) {
-  const colorFor = (id) => {
-    if (roles) return roles[id] ? { color: MUSCLE_COLOR[roles[id]], opacity: 0.9 } : { color: 'var(--track)', opacity: 1 };
-    if (heat) return heatColor(heat[id]);
-    if (selected) return id === selected ? { color: MUSCLE_COLOR.primary, opacity: 0.9 } : { color: 'var(--track)', opacity: 1 };
-    return { color: 'var(--track)', opacity: 1 };
-  };
+  const [data, setData] = useState(null);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => { let live = true; loadAssets().then((d) => live && setData(d), () => live && setFailed(true)); return () => { live = false; }; }, []);
+
+  const colorFor = useCallback((key, hovered) => {
+    const m = key.split('.')[0];
+    if (roles) {
+      const r = roles(key);
+      return r === 'primary' ? { rgb: RED, a: 0.92 } : r === 'secondary' ? { rgb: ORANGE, a: 0.85 } : null;
+    }
+    if (heat) return heatColor(heat[m]) || (hovered ? { rgb: RED, a: 0.35 } : null);
+    if (selected === m) return { rgb: RED, a: 0.9 };
+    return hovered ? { rgb: RED, a: 0.4 } : null;
+  }, [roles, heat, selected]);
+
+  if (failed) return null;
+  if (!data) return <div className="bodymap loading" aria-busy="true" />;
   return (
     <div className="bodymap">
-      <View shapes={FRONT} label="Front" colorFor={colorFor} onPick={onPick} />
-      <View shapes={BACK} label="Back" colorFor={colorFor} onPick={onPick} />
+      <View name="front" label="Front" data={data} colorFor={colorFor} onPick={onPick} />
+      <View name="back" label="Back" data={data} colorFor={colorFor} onPick={onPick} />
     </div>
   );
 }

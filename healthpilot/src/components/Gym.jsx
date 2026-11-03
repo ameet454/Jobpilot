@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { useStore } from '../lib/store.jsx';
-import { EXERCISES, EXERCISE_BY_ID, MUSCLES, videoSearchUrl } from '../data/exercises.js';
+import { EXERCISES, EXERCISE_BY_ID, headLabel, headRole, MUSCLES, videoSearchUrl } from '../data/exercises.js';
 import {
   buildSession, isRecord, lastPerformance, LEVELS, nextPlanDay, personalRecords, PLANS, planDays, sessionStats, SET_TYPES, suggestNext,
 } from '../lib/workout.js';
@@ -17,14 +17,21 @@ const mmss = (s) => `${Math.floor(s / 60)}:${String(Math.max(0, Math.floor(s % 6
 const repsLabel = (ex, [lo, hi]) => (ex.unit === 'time' ? `${lo}–${hi} s` : `${lo}–${hi} reps`);
 
 function Thumb({ ex }) {
-  return <div className="thumb"><FigureSvg ex={ex} t={ex.lift === 'AB' ? 1 : 0.85} compact /></div>;
+  const [broken, setBroken] = useState(false);
+  return (
+    <div className="thumb">
+      {broken
+        ? <FigureSvg ex={ex} t={ex.lift === 'AB' ? 1 : 0.85} compact />
+        : <img src={`${import.meta.env.BASE_URL}thumbs/${ex.id}.webp`} alt="" loading="lazy" width="240" height="180" onError={() => setBroken(true)} />}
+    </div>
+  );
 }
 
-function MusclePills({ ex }) {
+function MusclePills({ ex, all = false }) {
   return (
     <span className="pills">
-      {ex.primary.map((m) => <span key={m} className="mpill" style={{ '--c': MUSCLE_COLOR.primary }}>{MUSCLES[m].label}</span>)}
-      {ex.secondary.slice(0, 2).map((m) => <span key={m} className="mpill soft" style={{ '--c': MUSCLE_COLOR.secondary }}>{MUSCLES[m].label}</span>)}
+      {ex.focus.map((m) => <span key={m} className="mpill" style={{ '--c': MUSCLE_COLOR.primary }}>{headLabel(m)}</span>)}
+      {ex.helpers.slice(0, all ? undefined : 2).map((m) => <span key={m} className="mpill soft" style={{ '--c': MUSCLE_COLOR.secondary }}>{headLabel(m)}</span>)}
     </span>
   );
 }
@@ -35,7 +42,6 @@ export function ExerciseSheet({ id, onClose, onOpen }) {
   const ex = id && EXERCISE_BY_ID[id];
   const pr = ex ? personalRecords(state.workouts)[ex.id] : null;
   const last = ex ? lastPerformance(state.workouts, ex.id, '9999-12-31') : null;
-  const roles = ex ? Object.fromEntries([...ex.secondary.map((m) => [m, 'secondary']), ...ex.primary.map((m) => [m, 'primary'])]) : {};
   return (
     <Sheet open={!!ex} onClose={onClose} title={ex?.name || ''} wide>
       {ex && (
@@ -48,8 +54,8 @@ export function ExerciseSheet({ id, onClose, onOpen }) {
             <p>{ex.feel}</p>
           </div>
           <Card title="Muscles worked">
-            <BodyMap roles={roles} />
-            <MusclePills ex={ex} />
+            <BodyMap roles={(k) => headRole(ex, k)} />
+            <MusclePills ex={ex} all />
           </Card>
           <Card title="How to do it">
             <ol className="how">{ex.steps.map((s) => <li key={s}>{s}</li>)}</ol>
