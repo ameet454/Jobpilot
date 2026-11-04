@@ -66,6 +66,13 @@ diag() {
     r="$(label_rules "$c" | grep '\.rule=' | cut -d= -f2- | tr '\n' ';' || true)"
     if [ -n "$r" ]; then echo "  $c [$(docker inspect -f '{{.State.Status}} {{range $k, $v := .NetworkSettings.Networks}}{{$k}} {{end}}' "$c")] $r"; fi
   done
+  echo "Traefik config files that mention $DOMAIN:"
+  for m in $(docker inspect -f '{{range .Mounts}}{{.Source}} {{end}}' "$TRAEFIK" 2>/dev/null); do
+    find "$m" -maxdepth 3 -type f \( -name '*.yml' -o -name '*.yaml' -o -name '*.toml' \) 2>/dev/null | while read -r f; do
+      grep -n "$DOMAIN" "$f" 2>/dev/null | sed "s|^|  $f:|" || true
+    done
+  done
+  echo "Something else on ports 80/443: $( (ss -ltnp 2>/dev/null || true) | grep -E ':(80|443) ' | grep -oE 'users:\(\("[^"]+' | cut -d'"' -f2 | sort -u | tr '\n' ' ')"
   echo "──────────────────────────────────────────────────────"
   return 0
 }
@@ -93,25 +100,29 @@ SCONF="$(static_conf | sort -u)"
 
 # Containers whose Traefik rule serves this domain (except ours), plus any named like the old app.
 label_rules() { docker inspect -f '{{range $k, $v := .Config.Labels}}{{$k}}={{$v}}{{"\n"}}{{end}}' "$1" 2>/dev/null | grep '^traefik\.http\.routers\.' || true; }
+# Does a router rule mention the domain? Accepts `x`, "x" or 'x' quoting and the www. variant.
+DOM_RE="$(printf '%s' "$DOMAIN" | sed 's/\./\\./g')"
+DOM_PAT="[\`\"'](www\\.)?${DOM_RE}[\`\"']"
+serves_domain() { label_rules "$1" | grep '\.rule=' | grep -qE "$DOM_PAT"; }
 OLD=()
 while IFS= read -r c; do
   [ -z "$c" ] && continue
   [ "$c" = "$NAME" ] && continue
-  if label_rules "$c" | grep -q "Host(\`${DOMAIN}\`)"; then OLD+=("$c"); continue; fi
+  if serves_domain "$c"; then OLD+=("$c"); continue; fi
   case "$c" in *"$OLD_APP"*) OLD+=("$c") ;; esac
 done < <(docker ps -a --format '{{.Names}}')
 
 # Router settings to copy: from the container serving the domain now (or ours, on a re-run).
 SRC=""
 for c in "${OLD[@]}" "$NAME"; do
-  if label_rules "$c" | grep -q "Host(\`${DOMAIN}\`)"; then SRC="$c"; break; fi
+  if serves_domain "$c"; then SRC="$c"; break; fi
 done
 RULE="Host(\`${DOMAIN}\`)"; EP=""; RESOLVER=""
 if [ -n "$SRC" ]; then
   L="$(label_rules "$SRC")"
   # Of the routers serving the domain, copy the HTTPS one (it has a certificate resolver).
   router=""
-  for rt in $(printf '%s\n' "$L" | grep "Host(\`${DOMAIN}\`)" | grep '\.rule=' | cut -d= -f1 | sed 's/\.rule$//'); do
+  for rt in $(printf '%s\n' "$L" | grep '\.rule=' | grep -E "$DOM_PAT" | cut -d= -f1 | sed 's/\.rule$//'); do
     [ -z "$router" ] && router="$rt"
     if printf '%s\n' "$L" | grep -q "^${rt}\.tls\.certresolver="; then router="$rt"; break; fi
   done
@@ -273,10 +284,11 @@ LABELS=(
   -l "traefik.http.routers.$NAME.tls=true"
   -l "traefik.http.routers.$NAME.tls.certresolver=$RESOLVER"
   -l "traefik.http.routers.$NAME.service=$NAME"
+  -l "traefik.http.routers.$NAME.priority=10000"
   -l "traefik.http.services.$NAME.loadbalancer.server.port=80"
 )
 if [ -n "$WEB_EP" ]; then  # plain-http requests reach Apache, whose .htaccess redirects them to https
-  LABELS+=(-l "traefik.http.routers.$NAME-http.rule=$RULE" -l "traefik.http.routers.$NAME-http.entrypoints=$WEB_EP" -l "traefik.http.routers.$NAME-http.service=$NAME")
+  LABELS+=(-l "traefik.http.routers.$NAME-http.rule=$RULE" -l "traefik.http.routers.$NAME-http.entrypoints=$WEB_EP" -l "traefik.http.routers.$NAME-http.service=$NAME" -l "traefik.http.routers.$NAME-http.priority=10000")
 fi
 docker run -d --name "$NAME" --restart unless-stopped --network "$NET" \
   -v "$ROOT/www":/srv/www:ro -v "$ROOT/apache.conf":/etc/apache2/sites-enabled/000-default.conf:ro \
@@ -314,12 +326,27 @@ fi
 sleep 3
 code="$(docker exec "$NAME" curl -s -o /dev/null -w '%{http_code}' -H 'X-Forwarded-Proto: https' http://127.0.0.1/ || true)"
 [ "$code" = "200" ] && c_ok "App answers inside the container (HTTP 200)" || c_warn "App check returned HTTP $code — see: docker logs $NAME"
+LIVE_OK=""
 if command -v curl >/dev/null; then
-  ext="$(curl -sk --noproxy '*' -o /dev/null -w '%{http_code}' --resolve "$DOMAIN:443:127.0.0.1" "https://$DOMAIN/" || true)"
-  [ "$ext" = "200" ] && c_ok "https://$DOMAIN answers through Traefik (HTTP 200)" || c_warn "Through Traefik: HTTP $ext (a new certificate can take a minute)"
+  ours="$(md5sum < "$ROOT/www/current/index.html" | cut -c1-32)"
+  for i in 1 2 3 4 5 6; do
+    live="$(curl -sk --noproxy '*' --max-time 10 --resolve "$DOMAIN:443:127.0.0.1" "https://$DOMAIN/" | md5sum | cut -c1-32)"
+    [ "$live" = "$ours" ] && { LIVE_OK=1; break; }
+    sleep 5
+  done
+  if [ -n "$LIVE_OK" ]; then
+    c_ok "https://$DOMAIN now serves the new HealthPilot (release $(basename "$(readlink "$ROOT/www/current")" | cut -c1-7))"
+  else
+    c_warn "https://$DOMAIN is NOT serving the new app yet. Something else still receives the traffic:"
+    curl -sk --noproxy '*' --max-time 10 --resolve "$DOMAIN:443:127.0.0.1" -o /dev/null -w '    HTTP %{http_code}\n' "https://$DOMAIN/" || true
+    curl -sk --noproxy '*' --max-time 10 --resolve "$DOMAIN:443:127.0.0.1" "https://$DOMAIN/" | grep -oE '<title>[^<]*|src="[^"]*\.js"' | head -3 | sed 's/^/    /' || true
+    diag
+    echo "  Send a screenshot of everything from the Diagnosis line down."
+  fi
 fi
 echo
-c_ok "Done. Open https://$DOMAIN"
+if [ -n "${LIVE_OK:-}" ]; then c_ok "Done. Open https://$DOMAIN (if your browser still shows the old app, reload the page once)"
+else c_warn "The new app is installed and running, but $DOMAIN still points at the old one (see the Diagnosis above)."; fi
 echo "  • Every push to '$BRANCH' goes live within ~$EVERY minutes."
 echo "  • Deploy now:   FORCE=1 $ROOT/update.sh"
 echo "  • Update log:   tail -f /var/log/healthpilot-update.log"
