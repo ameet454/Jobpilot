@@ -12,7 +12,8 @@ import Dashboard from './components/Dashboard.jsx';
 import Gym from './components/Gym.jsx';
 import { Sheet } from './components/ui.jsx';
 import { TAB_ICONS } from './components/icons.jsx';
-import { ChevronLeft, ChevronRight, Settings as SettingsIcon } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Dumbbell, Lock, Settings as SettingsIcon, TrendingDown, UtensilsCrossed, Zap } from 'lucide-react';
+import ErrorBoundary from './components/ErrorBoundary.jsx';
 import { FOODS } from './data/foods.js';
 import { EXERCISES } from './data/exercises.js';
 
@@ -55,11 +56,11 @@ export default function App() {
           <h1>HealthPilot</h1>
           <p>Calorie, protein & habit tracking built for Indian food. Free, private, and fast — log a meal by typing it like a text.</p>
           <ul className="usp">
-            <li>⚡ Type “2 roti, dal, salad” — logged in one tap</li>
-            <li>🇮🇳 {FOODS.length} Indian dishes with real portion sizes</li>
-            <li>🔒 No sign-up. Your data never leaves your phone</li>
-            <li>📉 Smoothed weight trend that ignores water-weight noise</li>
-            <li>🏋️ 5-day gym plan, {EXERCISES.length} animated exercises showing which muscle to feel</li>
+            <li><Zap size={16} />Type “2 roti, dal, salad” — logged in one tap</li>
+            <li><UtensilsCrossed size={16} />{FOODS.length} Indian dishes with real portion sizes</li>
+            <li><Lock size={16} />No sign-up. Your data never leaves your phone</li>
+            <li><TrendingDown size={16} />Smoothed weight trend that ignores water-weight noise</li>
+            <li><Dumbbell size={16} />5-day gym plan, {EXERCISES.length} exercises on a 3-D athlete showing which muscle to feel</li>
           </ul>
         </div>
         <div className="card">
@@ -86,6 +87,7 @@ export default function App() {
       </header>
 
       <main className="content">
+        <ErrorBoundary resetKey={tab}>
         {tab === 'home' && <Dashboard date={date} goTo={(t) => (t === 'food' ? openFood(mealForHour()) : setTab(t))} />}
         {tab === 'gym' && <Gym date={date} />}
         {tab === 'today' && <Today date={date} onAddFood={openFood} goTo={setTab} />}
@@ -93,6 +95,7 @@ export default function App() {
         {tab === 'track' && <Track date={date} />}
         {tab === 'progress' && <Progress date={date} />}
         {tab === 'coach' && <Coach date={date} />}
+        </ErrorBoundary>
       </main>
 
       <nav className="tabbar" aria-label="Main">

@@ -44,7 +44,7 @@
 .mistakes { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .mistakes li { display: flex; gap: 8px; align-items: flex-start; font-size: 0.92rem; }
 .mistakes li svg { color: var(--bad); flex: none; margin-top: 3px; }
-.ex-detail > .btn.block { text-decoration: none; color: var(--text); }
+.ex-detail > a.btn.block { text-decoration: none; color: var(--text); }
 .v-fallback { min-height: 340px; }
 .chev { color: var(--muted); flex: none; }
 .hero-icon { width: 56px; height: 56px; margin: 0 auto; border-radius: 18px; display: flex; align-items: center; justify-content: center; background: var(--accent-soft); color: var(--accent); }

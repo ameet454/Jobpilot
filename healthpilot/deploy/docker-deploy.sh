@@ -64,16 +64,28 @@ public_check() {
     echo "  (or tell Claude where the site is hosted now)."
   fi
   ours="$( [ -f "$ROOT/www/current/index.html" ] && md5sum < "$ROOT/www/current/index.html" | cut -c1-32 || echo none)"
-  local body hdr
-  body="$(curl -s --max-time 15 "https://$DOMAIN/" 2>/dev/null || true)"
-  hdr="$(curl -sI --max-time 15 "https://$DOMAIN/" 2>/dev/null | grep -iE '^(server|via|x-cache|cf-ray|x-hcdn|platform|x-litespeed|x-powered-by|age):' | tr -d '\r' | tr '\n' ' ' || true)"
-  echo "Public https://$DOMAIN serves: $(printf '%s' "$body" | grep -oE '<title>[^<]*' | head -1 | sed 's/<title>//' || true) | $(printf '%s' "$body" | grep -oE 'assets/index-[A-Za-z0-9_-]+\.js' | head -1 || true)"
-  echo "Response headers: ${hdr:-(none)}"
-  if [ "$(printf '%s' "$body" | md5sum | cut -c1-32)" = "$ours" ]; then
-    printf '\033[32m✔ The public site is serving the NEW app. If your browser still shows the old one, press Ctrl+Shift+R (or close and reopen the app).\033[0m\n'
-  else
-    printf '\033[33m! The public site is serving something else than the new app installed here.\033[0m\n'
-  fi
+  local v6 all_ok=1
+  v6="$( (getent ahostsv6 "$DOMAIN" 2>/dev/null || true) | awk '{print $1}' | grep -v '^::ffff:' | sort -u | tr '\n' ' ' || true)"
+  [ -n "$v6" ] && echo "$DOMAIN IPv6 (AAAA): $v6"
+  for fam in 4 6; do
+    [ "$fam" = 6 ] && [ -z "$v6" ] && continue
+    local body err hdr asset
+    err="$(curl -$fam -sS --max-time 15 -o /tmp/hp-live.$$ "https://$DOMAIN/" 2>&1 || true)"
+    body="$(cat /tmp/hp-live.$$ 2>/dev/null || true)"; rm -f /tmp/hp-live.$$
+    hdr="$(curl -$fam -sI --max-time 15 "https://$DOMAIN/" 2>/dev/null | grep -iE '^(server|via|x-cache|cf-ray|platform|age):' | tr -d '\r' | tr '\n' ' ' || true)"
+    asset="$(printf '%s' "$body" | grep -oE 'assets/index-[A-Za-z0-9_-]+\.js' | head -1 || true)"
+    if [ -n "$body" ] && [ "$(printf '%s' "$body" | md5sum | cut -c1-32)" = "$ours" ]; then
+      printf '\033[32m✔ Over IPv%s the public site serves the NEW app (%s)\033[0m\n' "$fam" "$asset"
+    else
+      all_ok=""
+      printf '\033[33m! Over IPv%s the public site serves something else: %s %s %s\033[0m\n' "$fam" "${asset:-}" "${hdr:-}" "${err:+error: $err}"
+      if [ "$fam" = 6 ]; then
+        echo "  Visitors whose internet uses IPv6 see this version. Fix: hPanel → Domains → $DOMAIN → DNS records:"
+        echo "  delete the AAAA records for @ and www (or point them to this server's IPv6), then wait a few minutes."
+      fi
+    fi
+  done
+  [ -n "$all_ok" ] && printf '\033[32m✔ If your browser still shows the old app, press Ctrl+Shift+R (or close and reopen the app).\033[0m\n'
   echo "────────────────────────────────"
 }
 if [ "${2:-}" = "--status" ]; then public_check; exit 0; fi

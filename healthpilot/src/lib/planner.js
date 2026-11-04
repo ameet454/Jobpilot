@@ -73,12 +73,18 @@ function buildMeal(ids, budget) {
   return { items, kcal: Math.round(total), p: Math.round(protein) };
 }
 
-export function generatePlan({ kcal, p: proteinTarget }, diet = 'v', seed = Date.now()) {
+// Saved profiles use 'v' | 'e' | 'n'; accept spelled-out values too.
+const DIET_CODE = { veg: 'v', vegetarian: 'v', egg: 'e', eggetarian: 'e', nonveg: 'n', 'non-veg': 'n' };
+export const dietCode = (d) => (['v', 'e', 'n'].includes(d) ? d : DIET_CODE[String(d || '').toLowerCase()] || 'v');
+
+export function generatePlan({ kcal, p: proteinTarget }, dietIn = 'v', seed = Date.now()) {
+  const diet = dietCode(dietIn);
   const rand = mulberry32(seed);
   const plan = {};
   for (const [meal, share] of Object.entries(MEAL_SPLIT)) {
     const budget = kcal * share;
     const options = COMBOS[meal].filter((ids) => ids.every((id) => FOOD_BY_ID[id] && allowed(diet, FOOD_BY_ID[id])));
+    if (!options.length) continue;
     const picks = Array.from({ length: Math.min(3, options.length) }, () => options[Math.floor(rand() * options.length)]);
     const built = picks.map((ids) => buildMeal(ids, budget));
     // Score: closeness to budget + protein density, weighted toward the protein goal.
@@ -92,7 +98,7 @@ export function generatePlan({ kcal, p: proteinTarget }, diet = 'v', seed = Date
   // Protein top-up: Indian thalis run carb-heavy, so swap staple calories for
   // diet-appropriate protein sides until the day reaches ~90% of the target.
   const boosters = BOOSTERS.filter((id) => allowed(diet, FOOD_BY_ID[id]));
-  const dayProtein = () => Object.values(plan).reduce((a, m) => a + m.p, 0);
+  const dayProtein = () => Object.values(plan).reduce((a, m) => a + (m?.p || 0), 0);
   let guard = 0;
   while (proteinTarget && dayProtein() < proteinTarget * 0.9 && guard++ < 6) {
     const [meal, m] = Object.entries(plan).filter(([k]) => k !== 'snacks').sort((a, b) => a[1].p - b[1].p)[0]

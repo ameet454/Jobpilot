@@ -1,9 +1,10 @@
+import { CalendarDays, Camera } from 'lucide-react';
 import { useMemo, useRef, useState } from 'react';
 import { useStore } from '../lib/store.jsx';
 import { CATEGORIES, FOODS, getFood } from '../data/foods.js';
 import { parseMeal, searchFoods } from '../lib/parser.js';
 import { MEALS, makeEntry } from '../lib/entries.js';
-import { generatePlan } from '../lib/planner.js';
+import { generatePlan, dietCode } from '../lib/planner.js';
 import { analysePhoto, estimateFoods, fileToDataUrl } from '../lib/ai.js';
 import { Card, DietDot, Segmented, Sheet, Stepper, fmt } from './ui.jsx';
 
@@ -28,7 +29,7 @@ export default function Food({ date, meal, setMeal, onDone }) {
   const fileRef = useRef(null);
 
   const allFoods = useMemo(() => [...state.customFoods, ...FOODS], [state.customFoods]);
-  const dietOk = (f) => ({ v: 0, e: 1, n: 2 })[f.diet ?? 'v'] <= ({ v: 0, e: 1, n: 2 })[state.profile.diet ?? 'n'];
+  const dietOk = (f) => ({ v: 0, e: 1, n: 2 })[f.diet ?? 'v'] <= ({ v: 0, e: 1, n: 2 })[dietCode(state.profile.diet ?? 'n')];
 
   const list = useMemo(() => {
     if (query.trim()) return searchFoods(query, allFoods, 40).map((r) => r.food);
@@ -90,7 +91,7 @@ export default function Food({ date, meal, setMeal, onDone }) {
             onKeyDown={(e) => e.key === 'Enter' && parse()} autoComplete="off"
           />
           <button className="btn primary" onClick={parse} disabled={!text.trim()}>Add</button>
-          <button className="btn icon" title="Log from a photo (AI)" aria-label="Log from a photo" onClick={() => fileRef.current?.click()}>📷</button>
+          <button className="btn icon" title="Log from a photo (AI)" aria-label="Log from a photo" onClick={() => fileRef.current?.click()}><Camera size={18} /></button>
           <input ref={fileRef} type="file" accept="image/*" capture="environment" hidden onChange={onPhoto} />
         </div>
         {!basket.length && !text && (
@@ -129,7 +130,7 @@ export default function Food({ date, meal, setMeal, onDone }) {
       </Card>
 
       <div className="row between">
-        <button className="btn ghost sm" onClick={() => setPlanOpen(true)}>🗓️ Plan my day</button>
+        <button className="btn ghost sm" onClick={() => setPlanOpen(true)}><CalendarDays size={16} />Plan my day</button>
         <button className="btn ghost sm" onClick={() => setCustomOpen(true)}>＋ Custom food</button>
       </div>
 

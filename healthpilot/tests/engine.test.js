@@ -116,3 +116,17 @@ describe('count-based servings', () => {
     expect(parseMeal('sabzi')[0].food.id).toBe('mix-veg');
   });
 });
+
+describe('meal planner robustness', async () => {
+  const { generatePlan, dietCode } = await import('../src/lib/planner.js');
+  it('accepts spelled-out diet values and never returns an empty meal', () => {
+    expect(dietCode('nonveg')).toBe('n');
+    expect(dietCode('veg')).toBe('v');
+    expect(dietCode(undefined)).toBe('v');
+    for (const diet of ['v', 'e', 'n', 'nonveg', 'veg', 'unknown', undefined]) {
+      const plan = generatePlan({ kcal: 2000, p: 120 }, diet, 42);
+      expect(Object.values(plan.meals).every((m) => m && m.items.length > 0), String(diet)).toBe(true);
+      expect(plan.total.kcal).toBeGreaterThan(1000);
+    }
+  });
+});

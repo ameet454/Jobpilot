@@ -1,3 +1,4 @@
+import { Camera } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { createTracker, formCheckInfo, jointLandmarks } from '../lib/formcheck.js';
 import { loadPoseModel } from '../lib/poseEngine.js';
@@ -177,7 +178,7 @@ export default function FormCheck({ ex, onClose }) {
           <ul className="mistakes">{info.faults.map((f) => <li key={f}>{f}</li>)}</ul>
           <p className="small muted">🔒 The pose model runs on this phone. Video is never uploaded or saved.</p>
           {error && <p className="fc-error" role="alert">{error}</p>}
-          <button type="button" className="btn primary block" onClick={() => setSource({ kind: 'camera', facing: 'user' })}>📷 Start camera</button>
+          <button type="button" className="btn primary block" onClick={() => setSource({ kind: 'camera', facing: 'user' })}><Camera size={18} />Start camera</button>
           <button type="button" className="btn block" onClick={() => fileRef.current?.click()}>🎞️ Check a video from this phone</button>
           <input ref={fileRef} type="file" accept="video/*" hidden onChange={pickFile} />
           <button type="button" className="btn ghost block" onClick={close}>Close</button>
