@@ -64,7 +64,30 @@ To turn on the AI features, add this environment variable:
 
 Without a key, the endpoint returns 503 and the app quietly uses its offline engine.
 
-## Deploy to a Hostinger VPS (one command)
+## Deploy to a VPS running Docker + Traefik (medreglens.tech) — auto-updating
+
+This is how medreglens.tech is set up: a Hostinger VPS where Traefik routes domains to Docker containers.
+`deploy/docker-deploy.sh` replaces whatever container serves the domain today (cdsco, or an older
+HealthPilot), copies its HTTPS router settings, builds the app from GitHub and runs it behind Traefik.
+It also installs a timer that checks GitHub every 3 minutes, so **after this one-time setup, pushing to the
+branch is the deploy**: no one needs to log in to the server again.
+
+In hPanel, open **VPS → Browser terminal** and run once:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/ameet454/Jobpilot/claude/youthful-brown-hczlf7/healthpilot/deploy/docker-deploy.sh -o hp.sh && bash hp.sh medreglens.tech
+```
+
+It lists the containers it will remove and asks you to type `DELETE`. Their settings are saved to
+`/opt/healthpilot/backup-<date>/`, and their images and data volumes are kept. Add
+`OPENROUTER_API_KEY=sk-or-...` before `bash` to switch on the AI features.
+
+On the server afterwards: `FORCE=1 /opt/healthpilot/update.sh` deploys immediately, and
+`tail -f /var/log/healthpilot-update.log` shows each deploy. Releases are kept in
+`/opt/healthpilot/www/releases`; to roll back, point the `current` link at an older one.
+If the server has no Traefik, the script hands over to `vps-setup.sh` below.
+
+## Deploy to a Hostinger VPS without Docker (nginx, one command)
 
 `deploy/vps-setup.sh` does the whole job on an Ubuntu/Debian VPS:
 
