@@ -171,6 +171,24 @@ ORIGIN = hipC_mh
 def app(p): return to_app((np.asarray(p) - ORIGIN) * SCALE)
 
 P = app(V)
+# Natural skin colouring landmarks (MakeHuman space → app space):
+#   lips from the orbicularis-oris bone weights, nipples at the most forward point
+#   of each pec (breast bone region), navel from the navel target's vertices.
+def wsum(prefixes):
+    acc = np.zeros(len(V))
+    for b, pairs in mhw.items():
+        if b.startswith(prefixes):
+            for vi, w_ in pairs: acc[vi] += w_
+    return acc
+LIPS_W = wsum(('oris01', 'oris03', 'oris05', 'oris07'))
+NIPPLES = []
+BODY_VERTS = np.unique(np.array([i for f in groups['body'] for i in f]))  # skin only, not helper shells
+for k in ('L', 'R'):
+    bw = wsum((f'breast.{k}',))
+    cand = np.intersect1d(np.where(bw > 0.5)[0], BODY_VERTS)
+    NIPPLES.append(app(V[cand[np.argmax(V[cand, 2])]]))
+nav_idx = [i for i in (int(l.split()[0]) for l in open(os.path.join(MH, 't', 'stomach-navel-in.target')) if l[0] not in '#\n') if i in set(BODY_VERTS.tolist())]
+NAVEL = app(V[nav_idx].mean(0)) if nav_idx else None
 P_flat = app(V_flat)
 J = {}
 J['hip'] = app(hipC_mh); J['neck'] = app(neck_mh)
@@ -264,7 +282,7 @@ eye_t = tris(['helper-r-eye', 'helper-l-eye'])
 used = np.unique(np.concatenate([body_t.ravel(), eye_t.ravel()]))
 remap = -np.ones(len(V), int); remap[used] = np.arange(len(used))
 T = remap[np.concatenate([body_t, eye_t])]
-P = P[used]; W = W[used]; P_flat = P_flat[used]
+P = P[used]; W = W[used]; P_flat = P_flat[used]; LIPS_W = LIPS_W[used]
 is_eye = np.zeros(len(used), bool); is_eye[remap[np.unique(eye_t)]] = True
 nb = len(used)
 W[W.sum(1) == 0, BONES.index('head')] = 1  # eyes ride the head
@@ -389,9 +407,11 @@ hair = np.maximum.reduce([
     y - (eyes_y + 0.56 * span) - 0.10 * np.maximum(side - 4, 0) * 3,
     # Back of the head: the hairline dips to the nape in the middle and rises behind the ears.
     np.minimum(-front - 1.0, y - (eyes_y - 0.42 * span) - 0.06 * span * (side / 4.5) ** 2),
-    np.minimum(np.minimum(-front + 3.0, side - 6.2), y - (eyes_y + 0.30 * span)),
+    # Temples: the hairline slopes back towards the sideburn instead of a vertical edge.
+    np.minimum(np.minimum(-front + 2.2 + 0.45 * (y - eyes_y), side - 6.2), y - (eyes_y + 0.22 * span)),
 ])
-hair = np.where((headw > 0.45) & ~is_eye & (y > eyes_y - 0.75 * span), hair, -20.0)
+ear = (side > 6.6) & (y < eyes_y + 0.18 * span) & (front > -3.5) & (front < 0.8)
+hair = np.where((headw > 0.45) & ~is_eye & (y > eyes_y - 0.75 * span) & ~ear, hair, -20.0)
 iris = np.full(nb, -1.0)
 for sd in (1, -1):
     m = is_eye & (np.sign(P[:, 2]) == sd)
@@ -420,7 +440,15 @@ mid8 = mid.astype(np.uint8)
 mw8 = np.round(mw * 255).astype(np.uint8)
 ao8 = np.round(np.clip(ao, 0, 1.06) / 1.06 * 255).astype(np.uint8)
 eye8 = is_eye.astype(np.uint8)
-cuts = np.stack([hem, top, hair, iris, brow], 1)
+# Lips: strongest orbicularis-oris weights, kept to the front of the face.
+lips = np.where(~is_eye & (front > 3.0), (LIPS_W - 0.72) / 0.18, -20.0)
+# Areolas (radius ~1.5 units) and the navel (~0.8).
+areola = np.full(nb, -20.0)
+for c in NIPPLES:
+    d_ = np.linalg.norm(P - c, axis=1)
+    areola = np.maximum(areola, 1.0 - d_ / 2.3)
+navel = np.full(nb, -20.0) if NAVEL is None else 1.0 - np.linalg.norm(P - NAVEL, axis=1) / 0.9
+cuts = np.stack([hem, top, hair, iris, brow, lips, areola, navel], 1)
 cut16 = np.round(np.clip(cuts, -20, 20) * 1000).astype('<i2')
 blob = (pos16.tobytes() + sidx.tobytes() + sw.astype(np.uint8).tobytes() + mid8.tobytes() + mw8.tobytes()
         + np.stack([eye8, ao8], 1).tobytes())
@@ -461,7 +489,7 @@ meta = {
     'quant': QUANT, 'bones': BONES, 'rest': {b: jl(rest[b]) for b in BONES},
     'heads': HEADS, 'anchors': anchors, 'floorY': float(P[:, 1].min()),
     'joints': {k: v.tolist() for k, v in J.items()}, 'waist': WAIST,
-    'flatCount': int(len(moved)), 'grip': grip, 'cuts': ['hem', 'top', 'hair', 'iris', 'brow'], 'cutScale': 1000,
+    'flatCount': int(len(moved)), 'grip': grip, 'cuts': ['hem', 'top', 'hair', 'iris', 'brow', 'lips', 'areola', 'navel'], 'cutScale': 1000,
 }
 json.dump(meta, open(os.path.join(args.out, 'body.json'), 'w'), separators=(',', ':'))
 print('verts', nb, 'tris', len(T), 'bytes', len(blob), 'scale', SCALE)

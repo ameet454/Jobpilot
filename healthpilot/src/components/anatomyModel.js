@@ -31,13 +31,26 @@ export function loadAnatomy() {
  * Materials: resting muscle in a natural red-brown, bone in ivory, the target
  * muscle in hot red and helpers in amber; their glow is driven per frame.
  */
+/** Shared contraction amount (0..1) for the working muscles in the anatomy. */
+export const anatomyPump = { value: 0 };
+function swells(mat, k) {
+  mat.onBeforeCompile = (sh) => {
+    sh.uniforms.pump = anatomyPump;
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nuniform float pump;')
+      .replace('#include <begin_vertex>', `#include <begin_vertex>\ntransformed += normal * pump * ${k.toFixed(2)};`);
+  };
+  mat.customProgramCacheKey = () => `hp-swell-${k}`;
+  return mat;
+}
+
 export function anatomyMaterials(dark) {
   return {
     // Resting muscle pale, so only the working muscles carry strong colour.
     muscle: new THREE.MeshPhysicalMaterial({ color: dark ? '#b48478' : '#d6a597', roughness: 0.5, sheen: 0.5, sheenColor: new THREE.Color('#fff0ea'), sheenRoughness: 0.6 }),
     bone: new THREE.MeshStandardMaterial({ color: '#f2ebdd', roughness: 0.6 }),
-    primary: new THREE.MeshPhysicalMaterial({ color: '#ff2414', emissive: '#ff1200', emissiveIntensity: 0.7, roughness: 0.35, sheen: 0.4, sheenColor: new THREE.Color('#ffd6cf') }),
-    secondary: new THREE.MeshPhysicalMaterial({ color: '#ffad42', emissive: '#ff8400', emissiveIntensity: 0.15, roughness: 0.45 }),
+    primary: swells(new THREE.MeshPhysicalMaterial({ color: '#ff2414', emissive: '#ff1200', emissiveIntensity: 0.7, roughness: 0.35, sheen: 0.4, sheenColor: new THREE.Color('#ffd6cf') }), 0.8),
+    secondary: swells(new THREE.MeshPhysicalMaterial({ color: '#ffad42', emissive: '#ff8400', emissiveIntensity: 0.15, roughness: 0.45 }), 0.3),
     // Core muscles that only brace get a faint tint.
     stabiliser: new THREE.MeshPhysicalMaterial({ color: '#efc39a', roughness: 0.5 }),
     veil: new THREE.MeshStandardMaterial({ color: '#e6c2b6', roughness: 0.5, transparent: true, opacity: 0.16, depthWrite: false }),
@@ -92,10 +105,11 @@ export function buildAnatomy([meta, buf], materialFor) {
 const tmp = new THREE.Matrix4();
 const sc = new THREE.Matrix4();
 /** Move the anatomy to a rigged pose (same maths as the body). */
-export function poseAnatomy({ skeleton, meta }, R) {
+export function poseAnatomy({ skeleton, meta }, R, breath = 0) {
   boneFrames(meta, R).forEach(({ fr, stretch }, i) => {
     tmp.makeBasis(new THREE.Vector3(...fr.l), new THREE.Vector3(...fr.u), new THREE.Vector3(...fr.f)).setPosition(...fr.a);
     if (stretch !== 1) tmp.multiply(sc.makeScale(1, stretch, 1));
+    if (breath && meta.bones[i] === 'chest') tmp.multiply(sc.makeScale(1 + 0.012 * breath, 1, 1 + 0.03 * breath));
     skeleton.bones[i].matrixWorld.copy(tmp);
   });
 }

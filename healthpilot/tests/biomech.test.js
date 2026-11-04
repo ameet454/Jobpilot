@@ -40,3 +40,18 @@ describe('biomechanics overlays', () => {
     }
   });
 });
+
+describe('natural lifting speed', async () => {
+  const { liftTiming } = await import('../src/lib/biomech.js');
+  it('moves monotonically from start to end and slows where the resistance peaks', () => {
+    const curve = stressCurve(EXERCISE_BY_ID['barbell-curl']); // hardest mid-rep
+    const timing = liftTiming(curve);
+    let prev = -1;
+    for (let i = 0; i <= 20; i += 1) { const sPos = timing(i / 20); expect(sPos).toBeGreaterThanOrEqual(prev); prev = sPos; }
+    expect(timing(0)).toBeCloseTo(0, 5);
+    expect(timing(1)).toBeCloseTo(1, 2);
+    // Equal slices of time cover less ground in the middle (sticking point) than at the ends.
+    const span = (a, b) => timing(b) - timing(a);
+    expect(span(0.45, 0.55)).toBeLessThan(span(0, 0.1));
+  });
+});

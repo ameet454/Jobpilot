@@ -6,11 +6,11 @@ import { repPhase, STAGE_LOAD } from '../lib/pose.js';
 import { headLabel, headRole, seeThrough } from '../data/exercises.js';
 import { cuesFor } from '../data/coaching.js';
 import ExerciseFigure from './ExerciseFigure.jsx';
-import { BODY_CREDIT, bodyAnchor, buildBody, GLOW, loadBody, poseBody, setHands, setRoles, setXray } from './bodyModel.js';
-import { ANATOMY_CREDIT, anatomyMaterials, anatomyRole, buildAnatomy, loadAnatomy, poseAnatomy } from './anatomyModel.js';
+import { BODY_CREDIT, bodyAnchor, buildBody, GLOW, loadBody, poseBody, setHands, setPump, setRoles, setXray } from './bodyModel.js';
+import { ANATOMY_CREDIT, anatomyMaterials, anatomyPump, anatomyRole, buildAnatomy, loadAnatomy, poseAnatomy } from './anatomyModel.js';
 import { addFloor, addStudio, buildProps, defaultView, framing, makeMaterials } from './scene3d.js';
 import { buildOverlays, OVERLAY_COLOR } from './overlays3d.js';
-import { stressCurve, stressSummary } from '../lib/biomech.js';
+import { liftTiming, stressCurve, stressSummary } from '../lib/biomech.js';
 import { JOINT_LABEL } from '../lib/rig3d.js';
 
 const REPS = 10;
@@ -163,7 +163,8 @@ export default function Exercise3D({ ex }) {
     };
 
     const anchorHead = ex.focus[0];
-    const st = { clock: 0, last: null, rep: 0, prev: null, tip: 0, lastUi: 0, banner: 0, glow: 0.5, xray: 0, lifted: 0, xrayUi: false };
+    const st = { clock: 0, last: null, rep: 0, prev: null, tip: 0, lastUi: 0, banner: 0, glow: 0.5, xray: 0, lifted: 0, xrayUi: false, breath: 0, pump: 0 };
+    const timing = liftTiming(curve);
     const proj = new THREE.Vector3();
     let raf;
     // Skip work while the viewer is scrolled away or the tab is hidden.
@@ -177,11 +178,25 @@ export default function Exercise3D({ ex }) {
       st.last = now;
       if (ctl.current.playing) st.clock += dt * ctl.current.speed;
       const ph = repPhase(st.clock, ex.tempo, ex.lift);
-      const stress = curveAt(ph.t);
+      // Lifting slows through the sticking point and speeds up where the lever is short.
+      let t = ph.t;
+      if (ph.stage === 'lift') {
+        const u = ex.lift === 'BA' ? 1 - ph.t : ph.t;
+        const pos = timing(u);
+        t = ex.lift === 'BA' ? 1 - pos : pos;
+      }
+      const stress = curveAt(t);
+      // Breathe in on the way down, out through the effort.
+      const breathTarget = ph.stage === 'lower' ? ph.progress : ph.stage === 'lift' ? 1 - ph.progress : ph.stage === 'stretch' ? 1 : 0;
+      st.breath += (breathTarget - st.breath) * Math.min(1, dt / 300);
+      // The working muscle swells while it contracts, most at the hardest point.
+      const pumpTarget = ph.stage === 'lift' || ph.stage === 'squeeze' ? 0.35 + 0.65 * stress : ph.stage === 'lower' ? 0.3 * stress : 0.08;
+      st.pump += (pumpTarget - st.pump) * Math.min(1, dt / 220);
+      anatomyPump.value = st.pump;
       overlays.setVisible({ path: ctl.current.path, forces: ctl.current.forces });
-      const bm = overlays.update(ph.t, ph.stage, stress, camera);
+      const bm = overlays.update(t, ph.stage, stress, camera);
       const R = bm.R;
-      if (body) poseBody(body, R);
+      if (body) { poseBody(body, R, st.breath); setPump(body, st.pump); }
       // Skin → anatomy: after the first moment of lifting (auto), or when chosen.
       if (ph.stage === 'lift' && ctl.current.playing) st.lifted += dt;
       const wantX = ctl.current.layer === 'anatomy' || (ctl.current.layer === 'auto' && st.lifted > 450) ? 1 : 0;
@@ -190,7 +205,7 @@ export default function Exercise3D({ ex }) {
       if (body) setXray(body, st.xray);
       if (anatomy) {
         anatomy.mesh.visible = st.xray > 0.02;
-        if (anatomy.mesh.visible) poseAnatomy(anatomy, R);
+        if (anatomy.mesh.visible) poseAnatomy(anatomy, R, st.breath);
       }
       if ((st.xray > 0.5) !== st.xrayUi) { st.xrayUi = st.xray > 0.5; setXrayOn(st.xrayUi); }
       updateProps(R);
@@ -219,7 +234,7 @@ export default function Exercise3D({ ex }) {
       if (now - st.lastUi > 120) {
         st.lastUi = now;
         const cueText = ph.stage === 'lift' ? cues.lift : ph.stage === 'lower' ? cues.lower : ph.stage === 'squeeze' ? 'Squeeze and hold.' : cues.tips[st.tip % cues.tips.length];
-        setUi({ stage: ph.stage, left: Math.max(0, durations[ph.stage] * (1 - ph.progress)), progress: ph.progress, rep: st.rep, cue: cueText, done: now < st.banner, s: ex.lift === 'BA' ? 1 - ph.t : ph.t, stress });
+        setUi({ stage: ph.stage, left: Math.max(0, durations[ph.stage] * (1 - ph.progress)), progress: ph.progress, rep: st.rep, cue: cueText, done: now < st.banner, s: ex.lift === 'BA' ? 1 - t : t, stress });
       }
 
       if (camAnim) {
@@ -296,7 +311,6 @@ export default function Exercise3D({ ex }) {
           <span className="v-dot" />
           <span className="v-tag">{headLabel(ex.focus[0])}</span>
         </div>
-        <div className="v-lever" ref={leverTag} aria-hidden="true">Lever arm · {JOINT_LABEL[summary?.joint] || ''}</div>
         {ui.done && <div className="v-banner">Set complete — rest 60–90 s</div>}
         {loading && <div className="v-loading"><span className="spinner" />Loading 3-D coach…</div>}
         <div className="v-views" role="group" aria-label="Camera angle">

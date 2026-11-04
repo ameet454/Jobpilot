@@ -163,3 +163,22 @@ export function stressSummary(ex) {
     joint: jointName,
   };
 }
+
+/**
+ * Natural lifting speed: a lifter slows through the hardest part of the rep (the
+ * sticking point) and speeds up where the lever is short. Returns a function that maps
+ * eased time through the lift (0..1) to position through the lift (0..1).
+ */
+export function liftTiming(curve, n = 64) {
+  if (!curve) return (u) => u;
+  const at = (s) => { const x = s * (curve.length - 1); const i = Math.min(curve.length - 2, Math.floor(x)); return curve[i] + (curve[i + 1] - curve[i]) * (x - i); };
+  const cum = [0];
+  for (let i = 1; i <= n; i += 1) cum.push(cum[i - 1] + (0.55 + 0.9 * at((i - 0.5) / n)) / n);
+  const total = cum[n];
+  return (u) => {
+    const target = Math.max(0, Math.min(1, u)) * total;
+    let i = 1; while (i < n && cum[i] < target) i += 1;
+    const f = (target - cum[i - 1]) / (cum[i] - cum[i - 1] || 1);
+    return (i - 1 + f) / n;
+  };
+}

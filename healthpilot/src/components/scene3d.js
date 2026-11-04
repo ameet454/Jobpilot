@@ -233,7 +233,8 @@ export function framing(ex) {
   const max = [0, 1, 2].map((i) => Math.max(...pts.map((p) => p[i])));
   const ox = ex.view === 'front' ? 150 : (min[0] + max[0]) / 2;
   // Head top sits ~20 above the head joint; keep it in frame.
-  return { ox, cy: (min[1] + max[1] + 14) / 2, size: Math.max(max[0] - min[0], max[1] - min[1] + 20, 100) };
+  // Head top sits ~22 above the head joint: keep it, and the chips over it, in frame.
+  return { ox, cy: (min[1] + max[1] + 22) / 2, size: Math.max(max[0] - min[0], max[1] - min[1] + 34, 100) };
 }
 
 export function defaultView(ex) {

@@ -39,7 +39,8 @@ export function unpackBody(meta, buf) {
   const muscleW = take(Uint8Array, n * 2, 1);
   const attr = take(Uint8Array, n * 2, 1);
   off += (4 - (off % 4)) % 4;
-  const cut16 = take(Int16Array, n * 5, 2);
+  const NC = meta.cuts.length;
+  const cut16 = take(Int16Array, n * NC, 2);
   off += (4 - (off % 4)) % 4;
   const fc = meta.flatCount || 0;
   const flatIdx = take(Uint16Array, fc, 2);
@@ -77,6 +78,7 @@ function bodyMaterial(meta, dark) {
     glow: { value: 0.6 },
     idMode: { value: 0 }, idStep: { value: 7 },
     xray: { value: 0 },
+    pump: { value: 0 },
     cPrimary: { value: new THREE.Color(GLOW.primary) },
     cSecondary: { value: new THREE.Color(GLOW.secondary) },
     palette: { value: ['skin', 'shorts', 'hair', 'sclera', 'iris', 'band'].map((k) => new THREE.Color(pal[k])) },
@@ -88,9 +90,10 @@ function bodyMaterial(meta, dark) {
     Object.assign(sh.uniforms, uniforms);
     sh.vertexShader = sh.vertexShader
       .replace('#include <common>', `#include <common>
-        attribute vec2 aMus; attribute vec2 aMusW; attribute vec2 aAttr; attribute vec4 aCut; attribute float aBrow;
-        uniform float role[32];
+        attribute vec2 aMus; attribute vec2 aMusW; attribute vec2 aAttr; attribute vec4 aCut; attribute float aBrow; attribute vec3 aTint;
+        uniform float role[32]; uniform float pump;
         varying float vAO; varying float vHot; varying float vWarm; varying vec4 vCut; varying float vBrow; varying float vEye;
+        varying vec3 vRest; varying vec3 vTint;
         flat varying float vId;`)
       .replace('#include <begin_vertex>', `#include <begin_vertex>
         vId = (aMusW.x > 0.5 && aAttr.x < 0.5) ? aMus.x + 1.0 : 0.0;
@@ -102,19 +105,45 @@ function bodyMaterial(meta, dark) {
           vHot += r > 1.5 ? w : 0.0;
           vWarm += (r > 0.01 && r < 1.5) ? w * r : 0.0;
         }
-        vHot = clamp(vHot, 0.0, 1.0); vWarm = clamp(vWarm, 0.0, 1.0) * (1.0 - vHot);`);
+        vHot = clamp(vHot, 0.0, 1.0); vWarm = clamp(vWarm, 0.0, 1.0) * (1.0 - vHot);
+        vRest = position; vTint = aTint;
+        // The working muscle swells under the skin as it contracts.
+        transformed += normal * (pump * (0.85 * vHot + 0.3 * vWarm));`);
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <common>', `#include <common>
         uniform float glow; uniform vec3 cPrimary; uniform vec3 cSecondary; uniform vec3 palette[6];
         uniform float idMode; uniform float idStep; uniform float xray; flat varying float vId;
         varying float vAO; varying float vHot; varying float vWarm; varying vec4 vCut; varying float vBrow; varying float vEye;
-        float edge(float d) { float w = fwidth(d) * 0.75 + 1e-4; return smoothstep(-w, w, d); }`)
+        float edge(float d) { float w = fwidth(d) * 0.75 + 1e-4; return smoothstep(-w, w, d); }
+        varying vec3 vRest; varying vec3 vTint;
+        // Gradient noise on the rest-pose position, so skin detail sticks to the body as it moves.
+        vec3 hp_hash(vec3 p) { p = vec3(dot(p, vec3(127.1, 311.7, 74.7)), dot(p, vec3(269.5, 183.3, 246.1)), dot(p, vec3(113.5, 271.9, 124.6)));
+          return -1.0 + 2.0 * fract(sin(p) * 43758.5453123); }
+        float hp_noise(vec3 p) {
+          vec3 i = floor(p); vec3 f = fract(p); vec3 u = f * f * (3.0 - 2.0 * f);
+          return mix(mix(mix(dot(hp_hash(i), f), dot(hp_hash(i + vec3(1, 0, 0)), f - vec3(1, 0, 0)), u.x),
+                         mix(dot(hp_hash(i + vec3(0, 1, 0)), f - vec3(0, 1, 0)), dot(hp_hash(i + vec3(1, 1, 0)), f - vec3(1, 1, 0)), u.x), u.y),
+                     mix(mix(dot(hp_hash(i + vec3(0, 0, 1)), f - vec3(0, 0, 1)), dot(hp_hash(i + vec3(1, 0, 1)), f - vec3(1, 0, 1)), u.x),
+                         mix(dot(hp_hash(i + vec3(0, 1, 1)), f - vec3(0, 1, 1)), dot(hp_hash(i + vec3(1, 1, 1)), f - vec3(1, 1, 1)), u.x), u.y), u.z); }
+        vec3 hp_bump(vec3 surfPos, vec3 n, float h, float faceDir) {
+          vec3 sx = dFdx(surfPos); vec3 sy = dFdy(surfPos);
+          vec3 r1 = cross(sy, n); vec3 r2 = cross(n, sx);
+          float det = dot(sx, r1) * faceDir;
+          vec3 grad = sign(det) * (dFdx(h) * r1 + dFdy(h) * r2);
+          return normalize(abs(det) * n - grad); }`)
       .replace('#include <color_fragment>', `#include <color_fragment>
         float shorts = edge(vCut.x) * edge(vCut.y) * (1.0 - vEye);
         float band = shorts * (1.0 - edge(vCut.y - 2.4));
-        float hair = smoothstep(-1.1, 0.9, vCut.z) * (1.0 - vEye) * 0.92;
+        float hair = smoothstep(-1.4, 1.0, vCut.z) * (1.0 - vEye) * 0.92;
         float brow = smoothstep(0.0, 0.45, vBrow) * (1.0 - vEye) * 0.8;
         vec3 base = palette[0];
+        // Living skin: soft blotchy tone variation, warmer in creases, lips, areolas, navel.
+        float blot = hp_noise(vRest * 0.28) * 0.6 + hp_noise(vRest * 0.9) * 0.4;
+        base *= 1.0 + 0.07 * blot;
+        base = mix(base, base * vec3(1.08, 0.86, 0.8), clamp((1.0 - vAO) * 1.6, 0.0, 0.5));
+        base = mix(base, base * vec3(0.92, 0.6, 0.58), smoothstep(-0.2, 0.6, vTint.x) * 0.8);
+        base = mix(base, base * vec3(0.62, 0.47, 0.42), smoothstep(0.0, 0.45, vTint.y) * 0.85);
+        base = mix(base, base * 0.55, smoothstep(0.0, 0.5, vTint.z));
         base = mix(base, palette[2], max(hair, brow));
         base = mix(base, palette[1], shorts);
         base = mix(base, palette[5], band);
@@ -129,10 +158,28 @@ function bodyMaterial(meta, dark) {
         diffuseColor.rgb = base * mix(1.0, vAO, 0.9);
         float vCloth = shorts;
         float vHotOut = hot; float vWarmOut = warm;`)
+      .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
+        {
+          float skinM = (1.0 - shorts) * (1.0 - vEye);
+          // Pores and fine skin relief; a fabric weave on the shorts; short hair texture.
+          float hSkin = hp_noise(vRest * 7.0) * 0.3 + hp_noise(vRest * 2.6) * 0.7;
+          float hCloth = hp_noise(vec3(vRest.x * 14.0, vRest.y * 26.0, vRest.z * 14.0));
+          float hHair = hp_noise(vRest * vec3(9.0, 3.0, 9.0));
+          float h = mix(hSkin * 0.022, hCloth * 0.04, shorts) + hair * hHair * 0.045;
+          normal = hp_bump(-vViewPosition, normal, h * (1.0 - vEye), faceDirection);
+        }`)
       .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
         roughnessFactor = mix(roughnessFactor, 0.95, vCloth);
         roughnessFactor = mix(roughnessFactor, 0.9, max(hair, brow));
         roughnessFactor = mix(roughnessFactor, 0.25, vEye);`)
+      .replace('#include <opaque_fragment>', `
+        {
+          // Light scattering under the skin: shadows and the terminator turn warm instead of grey.
+          float skinL = (1.0 - shorts) * (1.0 - vEye) * (1.0 - hair);
+          float lum = dot(outgoingLight, vec3(0.299, 0.587, 0.114));
+          outgoingLight = mix(outgoingLight, outgoingLight * vec3(1.14, 0.93, 0.84), skinL * (1.0 - smoothstep(0.12, 0.65, lum)) * 0.7);
+        }
+        #include <opaque_fragment>`)
       .replace('#include <dithering_fragment>', `#include <dithering_fragment>
         if (xray > 0.001) {
           // Skin turns to glass: nearly clear face-on, a soft cool glow at the silhouette.
@@ -144,7 +191,7 @@ function bodyMaterial(meta, dark) {
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
         totalEmissiveRadiance += cPrimary * vHotOut * (0.08 + 0.30 * glow) + cSecondary * vWarmOut * 0.05;`);
   };
-  mat.customProgramCacheKey = () => 'hp-body-v5';
+  mat.customProgramCacheKey = () => 'hp-body-v6';
   mat.transparent = true; // alpha stays 1 until the X-ray fades the skin
   return { mat, uniforms };
 }
@@ -162,13 +209,16 @@ export function buildBody([meta, buf], { dark = false } = {}) {
   for (let i = 0; i < attr.length; i += 2) { attr[i] = d.attr[i]; attr[i + 1] = d.attr[i + 1] / 255; }
   geo.setAttribute('aAttr', new THREE.BufferAttribute(attr, 2));
   const n = meta.vertexCount;
-  const cut = new Float32Array(n * 4); const brow = new Float32Array(n);
+  const cut = new Float32Array(n * 4); const brow = new Float32Array(n); const tint = new Float32Array(n * 3);
   for (let i = 0; i < n; i += 1) {
-    for (let k = 0; k < 4; k += 1) cut[i * 4 + k] = d.cuts[i * 5 + k];
-    brow[i] = d.cuts[i * 5 + 4];
+    const NC = meta.cuts.length;
+    for (let k = 0; k < 4; k += 1) cut[i * 4 + k] = d.cuts[i * NC + k];
+    brow[i] = d.cuts[i * NC + 4];
+    for (let k = 0; k < 3; k += 1) tint[i * 3 + k] = NC > 5 + k ? d.cuts[i * NC + 5 + k] : -20;
   }
   geo.setAttribute('aCut', new THREE.BufferAttribute(cut, 4));
   geo.setAttribute('aBrow', new THREE.BufferAttribute(brow, 1));
+  geo.setAttribute('aTint', new THREE.BufferAttribute(tint, 3));
   geo.setIndex(new THREE.BufferAttribute(d.index, 1));
   geo.computeVertexNormals();
   // Morph 0: palms flat (push-ups). Normals for the morph come from the morphed shape.
@@ -222,6 +272,9 @@ export function setXray(body, k) {
   body.mesh.castShadow = k < 0.5;
 }
 
+/** 0..1: how hard the target muscle is contracting (makes it swell slightly). */
+export function setPump(body, k) { body.uniforms.pump.value = k; }
+
 /** 'fist' (default) or 'flat' palms. */
 export function setHands(body, shape) {
   body.mesh.morphTargetInfluences[0] = shape === 'flat' ? 1 : 0;
@@ -253,10 +306,12 @@ export function boneFrames(meta, R) {
 const tmp = new THREE.Matrix4();
 const sc = new THREE.Matrix4();
 /** Move the body's bones to a rigged pose (from rig3d.rig). */
-export function poseBody({ skeleton, meta }, R) {
+export function poseBody({ skeleton, meta }, R, breath = 0) {
   boneFrames(meta, R).forEach(({ fr, stretch }, i) => {
     tmp.makeBasis(new THREE.Vector3(...fr.l), new THREE.Vector3(...fr.u), new THREE.Vector3(...fr.f)).setPosition(...fr.a);
     if (stretch !== 1) tmp.multiply(sc.makeScale(1, stretch, 1));
+    // Breathing: the rib cage widens and deepens a little on the in-breath.
+    if (breath && meta.bones[i] === 'chest') tmp.multiply(sc.makeScale(1 + 0.012 * breath, 1, 1 + 0.03 * breath));
     skeleton.bones[i].matrixWorld.copy(tmp);
   });
 }
