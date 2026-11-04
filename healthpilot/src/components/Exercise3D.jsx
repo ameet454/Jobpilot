@@ -3,10 +3,11 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { Pause, Play, Rabbit, Route, Snail, Volume2, VolumeX, Weight } from 'lucide-react';
 import { repPhase, STAGE_LOAD } from '../lib/pose.js';
-import { headLabel, headRole } from '../data/exercises.js';
+import { headLabel, headRole, seeThrough } from '../data/exercises.js';
 import { cuesFor } from '../data/coaching.js';
 import ExerciseFigure from './ExerciseFigure.jsx';
-import { BODY_CREDIT, bodyAnchor, buildBody, GLOW, loadBody, poseBody, setHands, setRoles } from './bodyModel.js';
+import { BODY_CREDIT, bodyAnchor, buildBody, GLOW, loadBody, poseBody, setHands, setRoles, setXray } from './bodyModel.js';
+import { ANATOMY_CREDIT, anatomyMaterials, anatomyRole, buildAnatomy, loadAnatomy, poseAnatomy } from './anatomyModel.js';
 import { addFloor, addStudio, buildProps, defaultView, framing, makeMaterials } from './scene3d.js';
 import { buildOverlays, OVERLAY_COLOR } from './overlays3d.js';
 import { stressCurve, stressSummary } from '../lib/biomech.js';
@@ -39,6 +40,9 @@ export default function Exercise3D({ ex }) {
   const [view, setView] = useState('auto');
   const [showPath, setShowPath] = useState(true);
   const [showForces, setShowForces] = useState(true);
+  // 'auto': starts as skin, turns to anatomy once the rep gets going.
+  const [layer, setLayer] = useState('auto');
+  const [xrayOn, setXrayOn] = useState(false);
   const [failed, setFailed] = useState(() => typeof window !== 'undefined' && !webglOk());
   const [loading, setLoading] = useState(true);
   const cues = cuesFor(ex);
@@ -53,6 +57,7 @@ export default function Exercise3D({ ex }) {
   }, [voice]);
   useEffect(() => { ctl.current.setView?.(view); }, [view]);
   useEffect(() => { ctl.current.path = showPath; ctl.current.forces = showForces; }, [showPath, showForces]);
+  useEffect(() => { ctl.current.layer = layer; }, [layer]);
 
   useEffect(() => {
     if (failed) return undefined;
@@ -100,6 +105,17 @@ export default function Exercise3D({ ex }) {
         setLoading(false);
       })
       .catch(() => { if (!disposed) setFailed(true); });
+    // The anatomy under the skin (muscles + skeleton), posed by the same rig.
+    const amat = anatomyMaterials(dark);
+    let anatomy = null;
+    loadAnatomy()
+      .then((data) => {
+        if (disposed) return;
+        anatomy = buildAnatomy(data, (g) => amat[anatomyRole(ex, g, headRole, seeThrough)]);
+        anatomy.mesh.visible = false;
+        group.add(anatomy.mesh);
+      })
+      .catch(() => {}); // the skin view still works without it
     const updateProps = buildProps(group, ex, mat, ox);
     const overlays = buildOverlays(scene, ex, ox, { dark });
     const curveAt = (t) => {
@@ -110,7 +126,7 @@ export default function Exercise3D({ ex }) {
     };
 
     // Camera: spherical around the target, with an eased move between views.
-    const dist = size * 2.55;
+    const dist = size * 2.3;
     const placeCam = (az, el2) => {
       const a = (az * Math.PI) / 180; const e = (el2 * Math.PI) / 180;
       camera.position.set(Math.cos(e) * Math.cos(a) * dist, cy + Math.sin(e) * dist, Math.cos(e) * Math.sin(a) * dist);
@@ -147,7 +163,7 @@ export default function Exercise3D({ ex }) {
     };
 
     const anchorHead = ex.focus[0];
-    const st = { clock: 0, last: null, rep: 0, prev: null, tip: 0, lastUi: 0, banner: 0, glow: 0.5 };
+    const st = { clock: 0, last: null, rep: 0, prev: null, tip: 0, lastUi: 0, banner: 0, glow: 0.5, xray: 0, lifted: 0, xrayUi: false };
     const proj = new THREE.Vector3();
     let raf;
     // Skip work while the viewer is scrolled away or the tab is hidden.
@@ -166,6 +182,17 @@ export default function Exercise3D({ ex }) {
       const bm = overlays.update(ph.t, ph.stage, stress, camera);
       const R = bm.R;
       if (body) poseBody(body, R);
+      // Skin → anatomy: after the first moment of lifting (auto), or when chosen.
+      if (ph.stage === 'lift' && ctl.current.playing) st.lifted += dt;
+      const wantX = ctl.current.layer === 'anatomy' || (ctl.current.layer === 'auto' && st.lifted > 450) ? 1 : 0;
+      st.xray += (wantX - st.xray) * Math.min(1, dt / 420);
+      if (Math.abs(wantX - st.xray) < 0.004) st.xray = wantX;
+      if (body) setXray(body, st.xray);
+      if (anatomy) {
+        anatomy.mesh.visible = st.xray > 0.02;
+        if (anatomy.mesh.visible) poseAnatomy(anatomy, R);
+      }
+      if ((st.xray > 0.5) !== st.xrayUi) { st.xrayUi = st.xray > 0.5; setXrayOn(st.xrayUi); }
       updateProps(R);
 
       // The target muscle warms up with effort: brightest while lifting and squeezing.
@@ -173,6 +200,9 @@ export default function Exercise3D({ ex }) {
       const load = (STAGE_LOAD[ph.stage] ?? 0.8) * (curve ? 0.45 + 0.55 * stress : 1);
       st.glow += (load - st.glow) * Math.min(1, dt / 180);
       if (body) body.uniforms.glow.value = st.glow * (0.85 + 0.15 * Math.sin(now / 260));
+      // Anatomy: the target muscle burns brighter where the resistance peaks.
+      amat.primary.emissiveIntensity = 0.25 + 1.35 * st.glow * (0.88 + 0.12 * Math.sin(now / 180));
+      amat.secondary.emissiveIntensity = 0.06 + 0.3 * st.glow;
 
       if (ph.stage !== st.prev) {
         if (st.prev === 'lift') {
@@ -209,6 +239,7 @@ export default function Exercise3D({ ex }) {
         label.current.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px)`;
         label.current.style.opacity = proj.z < 1 ? '1' : '0';
         label.current.classList.toggle('flip', x > w * 0.62);
+        label.current.classList.toggle('peak', stress > 0.85 && (ph.stage === 'lift' || ph.stage === 'squeeze'));
       }
       // Name the lever arm next to it.
       if (leverTag.current) {
@@ -234,6 +265,7 @@ export default function Exercise3D({ ex }) {
       scene.traverse((o) => { if (o.geometry) o.geometry.dispose(); });
       Object.values(mat).forEach((m) => m.dispose());
       body?.material.dispose();
+      Object.values(amat).forEach((m) => m.dispose());
       renderer.dispose();
       renderer.domElement.remove();
       ctl.current.setView = null;
@@ -247,6 +279,11 @@ export default function Exercise3D({ ex }) {
   return (
     <div className="viewer">
       <div className="v-stage" ref={mount}>
+        <div className="v-layer" role="group" aria-label="Show skin or anatomy">
+          {[['skin', 'Skin'], ['anatomy', 'Anatomy']].map(([k, label2]) => (
+            <button key={k} type="button" className={(k === 'anatomy') === xrayOn ? 'on' : ''} aria-pressed={(k === 'anatomy') === xrayOn} onClick={() => setLayer(k)}>{label2}</button>
+          ))}
+        </div>
         <div className="v-top">
           <span className="v-chip"><small>Rep</small> <b>{ui.rep || '–'}</b><small>/{REPS}</small></span>
           {ui.stage && (
@@ -298,7 +335,7 @@ export default function Exercise3D({ ex }) {
         {showForces && <span><i className="line dashed" />Line of force</span>}
       </div>
       {curve && <StressChart curve={curve} s={ui.s ?? 0} summary={summary} lift={ex.lift} />}
-      <p className="credit">{BODY_CREDIT}. Muscle map derived from BodyParts3D © DBCLS, CC BY-SA 2.1 JP.</p>
+      <p className="credit">{BODY_CREDIT}. {ANATOMY_CREDIT}.</p>
     </div>
   );
 }

@@ -7,7 +7,9 @@
 import * as THREE from 'three';
 import { EXERCISE_BY_ID, EXERCISES, headRole } from '/src/data/exercises.js';
 import { rig } from '/src/lib/rig3d.js';
-import { buildBody, loadBody, poseBody, setHands, setRoles } from '/src/components/bodyModel.js';
+import { buildBody, loadBody, poseBody, setHands, setRoles, setXray } from '/src/components/bodyModel.js';
+import { anatomyMaterials, anatomyRole, buildAnatomy, loadAnatomy, poseAnatomy } from '/src/components/anatomyModel.js';
+import { headRole as role2, seeThrough } from '/src/data/exercises.js';
 import { addFloor, addStudio, buildProps, defaultView, framing, makeMaterials } from '/src/components/scene3d.js';
 
 const q = new URLSearchParams(location.search);
@@ -15,6 +17,8 @@ const ids = q.get('ex') === 'all' ? EXERCISES.map((e) => e.id) : (q.get('ex') ||
 const ts = (q.get('t') || '0,1').split(',').map(Number);
 const W = +(q.get('w') || 360), H = +(q.get('h') || 300);
 const data = await loadBody();
+const XR = +(q.get('xray') || 0);
+const adata = XR ? await loadAnatomy() : null;
 const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true, alpha: true });
 renderer.setPixelRatio(1); renderer.setSize(W, H);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -37,6 +41,13 @@ for (const id of ids) for (const t of ts) {
     const g = new THREE.Group(); scene.add(g);
     const up = buildProps(g, ex, mat, f.ox);
     const R = rig(ex, t, f.ox); poseBody(body, R); up(R);
+    if (XR) {
+      setXray(body, XR);
+      const am = anatomyMaterials(false);
+      am.primary.emissiveIntensity = 1.2; am.secondary.emissiveIntensity = 0.25;
+      const an = buildAnatomy(adata, (g) => am[anatomyRole(ex, g, role2, seeThrough)]);
+      scene.add(an.mesh); poseAnatomy(an, R);
+    }
     if (!q.get('az')) ({ az, el } = defaultView(ex));
   } else {
     body.skeleton.bones.forEach((b, i) => b.matrixWorld.copy(body.skeleton.boneInverses[i]).invert());

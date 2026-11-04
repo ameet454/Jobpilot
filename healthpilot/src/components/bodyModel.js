@@ -76,6 +76,7 @@ function bodyMaterial(meta, dark) {
     role: { value: new Float32Array(32) },
     glow: { value: 0.6 },
     idMode: { value: 0 }, idStep: { value: 7 },
+    xray: { value: 0 },
     cPrimary: { value: new THREE.Color(GLOW.primary) },
     cSecondary: { value: new THREE.Color(GLOW.secondary) },
     palette: { value: ['skin', 'shorts', 'hair', 'sclera', 'iris', 'band'].map((k) => new THREE.Color(pal[k])) },
@@ -105,7 +106,7 @@ function bodyMaterial(meta, dark) {
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <common>', `#include <common>
         uniform float glow; uniform vec3 cPrimary; uniform vec3 cSecondary; uniform vec3 palette[6];
-        uniform float idMode; uniform float idStep; flat varying float vId;
+        uniform float idMode; uniform float idStep; uniform float xray; flat varying float vId;
         varying float vAO; varying float vHot; varying float vWarm; varying vec4 vCut; varying float vBrow; varying float vEye;
         float edge(float d) { float w = fwidth(d) * 0.75 + 1e-4; return smoothstep(-w, w, d); }`)
       .replace('#include <color_fragment>', `#include <color_fragment>
@@ -120,8 +121,9 @@ function bodyMaterial(meta, dark) {
         vec3 eye = mix(palette[3], palette[4], edge(vCut.w));
         base = mix(base, eye, vEye);
         float skin = (1.0 - shorts) * (1.0 - vEye) * (1.0 - hair);
-        float hot = vHot * (1.0 - shorts * 0.6) * (1.0 - vEye);
-        float warm = vWarm * (1.0 - shorts * 0.6) * (1.0 - vEye);
+        // In anatomy view the muscles underneath carry the colour, not the skin.
+        float hot = vHot * (1.0 - shorts * 0.6) * (1.0 - vEye) * (1.0 - xray);
+        float warm = vWarm * (1.0 - shorts * 0.6) * (1.0 - vEye) * (1.0 - xray);
         base = mix(base, cSecondary, warm * 0.38);
         base = mix(base, cPrimary, hot * (0.58 + 0.25 * glow));
         diffuseColor.rgb = base * mix(1.0, vAO, 0.9);
@@ -132,11 +134,18 @@ function bodyMaterial(meta, dark) {
         roughnessFactor = mix(roughnessFactor, 0.9, max(hair, brow));
         roughnessFactor = mix(roughnessFactor, 0.25, vEye);`)
       .replace('#include <dithering_fragment>', `#include <dithering_fragment>
+        if (xray > 0.001) {
+          // Skin turns to glass: nearly clear face-on, a soft cool glow at the silhouette.
+          float fres = pow(1.0 - abs(dot(normalize(vNormal), normalize(vViewPosition))), 2.2);
+          gl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(0.80, 0.90, 1.0), xray * (0.08 + 0.55 * fres));
+          gl_FragColor.a *= mix(1.0, 0.015 + 0.55 * fres * fres, xray);
+        }
         if (idMode > 0.5) gl_FragColor = vec4(vId * idStep / 255.0, 0.0, 0.0, 1.0);`)
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
         totalEmissiveRadiance += cPrimary * vHotOut * (0.08 + 0.30 * glow) + cSecondary * vWarmOut * 0.05;`);
   };
-  mat.customProgramCacheKey = () => 'hp-body-v4';
+  mat.customProgramCacheKey = () => 'hp-body-v5';
+  mat.transparent = true; // alpha stays 1 until the X-ray fades the skin
   return { mat, uniforms };
 }
 
@@ -204,6 +213,13 @@ export function setRoles(body, roleOf) {
     const stabiliser = /^(abs|lowerback)/.test(h);
     r[i] = role === 'primary' ? 2 : role === 'secondary' ? (stabiliser ? 0.4 : 1) : 0;
   });
+}
+
+/** 0 = solid skin, 1 = glass skin that shows the anatomy inside. */
+export function setXray(body, k) {
+  body.uniforms.xray.value = k;
+  body.material.depthWrite = k < 0.35;
+  body.mesh.castShadow = k < 0.5;
 }
 
 /** 'fist' (default) or 'flat' palms. */
