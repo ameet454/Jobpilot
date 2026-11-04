@@ -71,8 +71,13 @@ done
 RULE="Host(\`${DOMAIN}\`)"; EP=""; RESOLVER=""
 if [ -n "$SRC" ]; then
   L="$(label_rules "$SRC")"
-  r="$(printf '%s\n' "$L" | grep "Host(\`${DOMAIN}\`)" | grep '\.rule=' | head -1 | cut -d= -f2- || true)"
-  router="$(printf '%s\n' "$L" | grep "Host(\`${DOMAIN}\`)" | grep '\.rule=' | head -1 | cut -d= -f1 | sed 's/\.rule$//' || true)"
+  # Of the routers serving the domain, copy the HTTPS one (it has a certificate resolver).
+  router=""
+  for rt in $(printf '%s\n' "$L" | grep "Host(\`${DOMAIN}\`)" | grep '\.rule=' | cut -d= -f1 | sed 's/\.rule$//'); do
+    [ -z "$router" ] && router="$rt"
+    if printf '%s\n' "$L" | grep -q "^${rt}\.tls\.certresolver="; then router="$rt"; break; fi
+  done
+  r="$(printf '%s\n' "$L" | grep "^${router}\.rule=" | head -1 | cut -d= -f2- || true)"
   [ -n "$r" ] && RULE="$r"
   EP="$(printf '%s\n' "$L" | grep "^${router}\.entrypoints=" | head -1 | cut -d= -f2- | cut -d, -f1 || true)"
   RESOLVER="$(printf '%s\n' "$L" | grep "^${router}\.tls\.certresolver=" | head -1 | cut -d= -f2- || true)"
@@ -84,8 +89,11 @@ fi
 if [ -z "$RESOLVER" ]; then
   RESOLVER="$(printf '%s\n' $TARGS | grep -ioE 'certificatesresolvers\.[a-z0-9_-]+\.' | head -1 | cut -d. -f2 || true)"
 fi
-EP="${EP:-websecure}"; RESOLVER="${RESOLVER:-letsencrypt}"
 WEB_EP="$(printf '%s\n' $TARGS | grep -ioE 'entrypoints\.[a-z0-9_-]+\.address=:80$' | head -1 | cut -d. -f2 || true)"
+TLS_EP="$(printf '%s\n' $TARGS | grep -ioE 'entrypoints\.[a-z0-9_-]+\.address=:443$' | head -1 | cut -d. -f2 || true)"
+# Never put the HTTPS router on the port-80 entrypoint.
+if [ -n "$EP" ] && [ "$EP" = "$WEB_EP" ] && [ -n "$TLS_EP" ]; then EP="$TLS_EP"; fi
+EP="${EP:-${TLS_EP:-websecure}}"; RESOLVER="${RESOLVER:-letsencrypt}"
 
 # Network shared with Traefik (prefer the one the old app used, then Traefik's own).
 NET="$(printf '%s\n' $TARGS | grep -oE 'providers\.docker\.network=[^ ]+' | head -1 | cut -d= -f2 || true)"
@@ -108,7 +116,8 @@ if [ "${#OLD[@]}" -gt 0 ]; then
   for c in "${OLD[@]}"; do printf '    %s  (%s)\n' "$c" "$(docker inspect -f '{{.Config.Image}}' "$c")"; done
   echo "  Their settings are saved first; images and data volumes are kept, so this can be undone."
   if [ "${YES:-}" != "1" ]; then
-    read -r -p "  Type DELETE to continue: " ans < /dev/tty
+    ans=""
+    { read -r -p "  Type DELETE to continue: " ans < /dev/tty; } 2>/dev/null || read -r -p "  Type DELETE to continue: " ans || true
     [ "$ans" = "DELETE" ] || die "Stopped. Nothing was changed."
   fi
   mkdir -p "$ROOT/backup-$STAMP"
@@ -161,7 +170,8 @@ cat > "$ROOT/update.sh" <<EOS
 exec 9>/run/healthpilot-update.lock
 flock -n 9 || exit 0
 docker run --rm ${BUILD_DOCKER_ARGS:-} -e REPO="$REPO" -e BRANCH="$BRANCH" -e FORCE="\${FORCE:-}" \\
-  -v "$ROOT":/w "$NODE_IMAGE" bash /w/build.sh >> /var/log/healthpilot-update.log 2>&1
+  -v "$ROOT":/w "$NODE_IMAGE" bash /w/build.sh >> /var/log/healthpilot-update.log 2>&1 \\
+  || { echo "\$(date -u +%FT%TZ) build failed; the previous release stays live" >> /var/log/healthpilot-update.log; exit 1; }
 EOS
 chmod +x "$ROOT/update.sh" "$ROOT/build.sh"
 
@@ -184,10 +194,13 @@ EOS
 c_info "Building the app from GitHub ($BRANCH) — the first build takes 1–3 minutes…"
 pull() { docker pull -q "$1" >/dev/null 2>&1 || docker image inspect "$1" >/dev/null 2>&1 || die "Could not download the Docker image $1"; }
 pull "$NODE_IMAGE"
-FORCE=1 "$ROOT/update.sh" || true
-tail -n 3 /var/log/healthpilot-update.log || true
-[ -e "$ROOT/www/current/index.html" ] || die "The build failed. Details: /var/log/healthpilot-update.log"
-c_ok "Built $(basename "$(readlink "$ROOT/www/current")" | cut -c1-7)"
+if FORCE=1 "$ROOT/update.sh"; then
+  c_ok "Built $(basename "$(readlink "$ROOT/www/current")" | cut -c1-7)"
+else
+  tail -n 15 /var/log/healthpilot-update.log || true
+  [ -e "$ROOT/www/current/index.html" ] || die "The build failed. Details: /var/log/healthpilot-update.log"
+  c_warn "This build failed, so the previous release stays live. Details: /var/log/healthpilot-update.log"
+fi
 
 # ── 4. Run it behind Traefik ────────────────────────────────────────────────
 pull "$PHP_IMAGE"
