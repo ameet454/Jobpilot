@@ -6,6 +6,7 @@
 #   bash docker-deploy.sh medreglens.tech            # asks before replacing the old app
 #   YES=1 bash docker-deploy.sh medreglens.tech      # no questions
 #   bash docker-deploy.sh medreglens.tech --inspect  # only show what it finds
+#   bash docker-deploy.sh medreglens.tech --status   # is the public site the new app? where does DNS point?
 #
 # What it does
 #   1. Finds Traefik and whatever container serves the domain today (cdsco, or
@@ -40,10 +41,42 @@ c_warn() { printf '\033[33m! %s\033[0m\n' "$*"; }
 die()    { printf '\033[31m✘ %s\033[0m\n' "$*" >&2; exit 1; }
 
 INSPECT=""; [ "${2:-}" = "--inspect" ] && INSPECT=1
-[ -n "$DOMAIN" ] || die "Usage: bash docker-deploy.sh yourdomain.com [--inspect]"
+[ -n "$DOMAIN" ] || die "Usage: bash docker-deploy.sh yourdomain.com [--inspect | --status]"
 [ "$(id -u)" -eq 0 ] || die "Run as root (or with sudo)."
 command -v docker >/dev/null || die "Docker is not installed on this server."
 docker info >/dev/null 2>&1 || die "Docker is installed but not running."
+
+# Where is the domain really served from, and is it the new app? (also runs at the end of a deploy)
+public_check() {
+  echo; echo "──── Live check for $DOMAIN ────"
+  local rel ours myips dns
+  rel="$(basename "$(readlink "$ROOT/www/current" 2>/dev/null || echo none)")"
+  echo "New app installed on this server: $( [ "$rel" != none ] && echo "yes, release ${rel:0:7}" || echo "NO (the deploy has not completed here)")"
+  echo "App container: $(docker inspect -f '{{.State.Status}}' "$NAME" 2>/dev/null | grep . || echo 'not found')"
+  myips="$( (hostname -I 2>/dev/null; curl -s4 --max-time 5 https://api.ipify.org 2>/dev/null) | tr ' ' '\n' | grep -E '^[0-9]+\.' | sort -u | tr '\n' ' ' || true)"
+  dns="$( (getent ahostsv4 "$DOMAIN" 2>/dev/null || true) | awk '{print $1}' | sort -u | tr '\n' ' ' || true)"
+  echo "This server's IPs:  $myips"
+  echo "$DOMAIN points to: ${dns:-(no DNS answer)}"
+  local here=""; for ip in $dns; do case " $myips " in *" $ip "*) here=1 ;; esac; done
+  if [ -n "$dns" ] && [ -z "$here" ]; then
+    printf '\033[31m✘ %s does NOT point to this server, so changes here cannot show up on the site.\033[0m\n' "$DOMAIN"
+    echo "  Fix: hPanel → Domains → $DOMAIN → DNS records: set the A records for @ and www to $(printf '%s' "$myips" | awk '{print $NF}')"
+    echo "  (or tell Claude where the site is hosted now)."
+  fi
+  ours="$( [ -f "$ROOT/www/current/index.html" ] && md5sum < "$ROOT/www/current/index.html" | cut -c1-32 || echo none)"
+  local body hdr
+  body="$(curl -s --max-time 15 "https://$DOMAIN/" 2>/dev/null || true)"
+  hdr="$(curl -sI --max-time 15 "https://$DOMAIN/" 2>/dev/null | grep -iE '^(server|via|x-cache|cf-ray|x-hcdn|platform|x-litespeed|x-powered-by|age):' | tr -d '\r' | tr '\n' ' ' || true)"
+  echo "Public https://$DOMAIN serves: $(printf '%s' "$body" | grep -oE '<title>[^<]*' | head -1 | sed 's/<title>//' || true) | $(printf '%s' "$body" | grep -oE 'assets/index-[A-Za-z0-9_-]+\.js' | head -1 || true)"
+  echo "Response headers: ${hdr:-(none)}"
+  if [ "$(printf '%s' "$body" | md5sum | cut -c1-32)" = "$ours" ]; then
+    printf '\033[32m✔ The public site is serving the NEW app. If your browser still shows the old one, press Ctrl+Shift+R (or close and reopen the app).\033[0m\n'
+  else
+    printf '\033[33m! The public site is serving something else than the new app installed here.\033[0m\n'
+  fi
+  echo "────────────────────────────────"
+}
+if [ "${2:-}" = "--status" ]; then public_check; exit 0; fi
 
 # ── 1. Traefik ──────────────────────────────────────────────────────────────
 TRAEFIK="$(docker ps --format '{{.Names}}\t{{.Image}}' | awk -F'\t' 'tolower($2) ~ /traefik/ {print $1; exit}')"
@@ -344,6 +377,7 @@ if command -v curl >/dev/null; then
     echo "  Send a screenshot of everything from the Diagnosis line down."
   fi
 fi
+public_check
 echo
 if [ -n "${LIVE_OK:-}" ]; then c_ok "Done. Open https://$DOMAIN (if your browser still shows the old app, reload the page once)"
 else c_warn "The new app is installed and running, but $DOMAIN still points at the old one (see the Diagnosis above)."; fi
