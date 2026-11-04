@@ -236,7 +236,7 @@ for f in /var/www/healthpilot/api/config.php; do
   [ -f "$f" ] && [ ! -f "$ROOT/www/shared/config.php" ] && cp "$f" "$ROOT/www/shared/config.php" && c_ok "kept the AI key from $f"
 done
 if [ -n "${OPENROUTER_API_KEY:-}" ]; then
-  printf "<?php\nreturn ['OPENROUTER_API_KEY' => '%s'];\n" "$OPENROUTER_API_KEY" > "$ROOT/www/shared/config.php"
+  printf "<?php\ndefine('OPENROUTER_API_KEY', '%s');\n" "$OPENROUTER_API_KEY" > "$ROOT/www/shared/config.php"
   c_ok "AI key saved"
 fi
 
@@ -328,6 +328,43 @@ docker run -d --name "$NAME" --restart unless-stopped --network "$NET" \
   "${LABELS[@]}" "$PHP_IMAGE" bash -c 'a2enmod -q rewrite headers >/dev/null && exec apache2-foreground' >/dev/null
 c_ok "Container $NAME is running"
 
+# ── 4b. nginx on the host in front? ─────────────────────────────────────────
+# If nginx (not Traefik) answers ports 80/443, point its site for the domain at the
+# auto-updating release. Only the `root` line of that one site file changes (backed up first).
+if command -v nginx >/dev/null && (ss -ltnp 2>/dev/null || true) | grep -E ':(80|443) ' | grep -q '"nginx"'; then
+  SITE=""
+  for f in /etc/nginx/sites-enabled/* /etc/nginx/conf.d/*.conf; do
+    [ -f "$f" ] || continue
+    if grep -qE "server_name[^;]*[[:space:]](www\.)?${DOM_RE}([[:space:];]|$)" "$f"; then SITE="$(readlink -f "$f")"; break; fi
+  done
+  if [ -z "$SITE" ]; then
+    for f in /etc/nginx/sites-enabled/* /etc/nginx/conf.d/*.conf; do
+      [ -f "$f" ] && grep -qE '^[[:space:]]*root[[:space:]]+[^;]*healthpilot' "$f" && { SITE="$(readlink -f "$f")"; break; }
+    done
+  fi
+  if [ -n "$SITE" ]; then
+    NROOT="$(grep -m1 -E '^[[:space:]]*root[[:space:]]+' "$SITE" | sed -E 's/^[[:space:]]*root[[:space:]]+([^;]+);.*/\1/' || true)"
+    TARGET="$ROOT/www/current"
+    WAS=""
+    if [ -n "$NROOT" ] && [ "$NROOT" != "$TARGET" ]; then
+      WAS=" (was $NROOT)"
+      mkdir -p "$ROOT/backup-$STAMP"
+      cp "$SITE" "$ROOT/backup-$STAMP/nginx-$(basename "$SITE").conf"
+      sed -i -E "s#^([[:space:]]*root[[:space:]]+)$(printf '%s' "$NROOT" | sed 's/[.[\*^$#]/\\&/g');#\1$TARGET;#" "$SITE"
+    fi
+    if nginx -t >/dev/null 2>&1; then
+      systemctl reload nginx 2>/dev/null || nginx -s reload 2>/dev/null
+      c_ok "nginx answers $DOMAIN on ports 80/443; its site ($SITE) now serves the new release$WAS"
+    else
+      cp "$ROOT/backup-$STAMP/nginx-$(basename "$SITE").conf" "$SITE"
+      nginx -t || true
+      c_warn "nginx did not accept the change, so it was undone. Send Claude the lines above."
+    fi
+  else
+    c_warn "nginx answers ports 80/443 but none of its sites mentions $DOMAIN."
+  fi
+fi
+
 # ── 5. Auto-update ──────────────────────────────────────────────────────────
 if command -v systemctl >/dev/null && [ -d /run/systemd/system ]; then
   cat > /etc/systemd/system/healthpilot-update.service <<EOS
@@ -356,8 +393,12 @@ else
 fi
 
 # ── 6. Check ────────────────────────────────────────────────────────────────
-sleep 3
-code="$(docker exec "$NAME" curl -s -o /dev/null -w '%{http_code}' -H 'X-Forwarded-Proto: https' http://127.0.0.1/ || true)"
+code=""
+for i in 1 2 3 4 5 6 7 8; do
+  sleep 2
+  code="$(docker exec "$NAME" curl -s -o /dev/null -w '%{http_code}' -H 'X-Forwarded-Proto: https' http://127.0.0.1/ 2>/dev/null || true)"
+  [ "$code" = "200" ] && break
+done
 [ "$code" = "200" ] && c_ok "App answers inside the container (HTTP 200)" || c_warn "App check returned HTTP $code — see: docker logs $NAME"
 LIVE_OK=""
 if command -v curl >/dev/null; then
