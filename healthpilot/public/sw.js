@@ -2,7 +2,7 @@
  * Navigations: network-first (fresh deploys win), cached fallback offline.
  * Hashed /assets/*, the /body/ model and /thumbs/: cache-first. Those two folders are
  * not hashed, so bump CACHE whenever they change. API calls: never cached. */
-const CACHE = 'healthpilot-v8';
+const CACHE = 'healthpilot-v9';
 // Relative to this script, so it works at a domain root or in a subfolder.
 const SHELL = ['./', './index.html', './icon.svg', './manifest.webmanifest'];
 const INDEX = new URL('./index.html', self.location).href;

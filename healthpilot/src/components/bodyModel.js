@@ -111,7 +111,7 @@ function bodyMaterial(meta, dark) {
       .replace('#include <color_fragment>', `#include <color_fragment>
         float shorts = edge(vCut.x) * edge(vCut.y) * (1.0 - vEye);
         float band = shorts * (1.0 - edge(vCut.y - 2.4));
-        float hair = smoothstep(-0.5, 0.5, vCut.z) * (1.0 - vEye) * 0.92;
+        float hair = smoothstep(-1.1, 0.9, vCut.z) * (1.0 - vEye) * 0.92;
         float brow = smoothstep(0.0, 0.45, vBrow) * (1.0 - vEye) * 0.8;
         vec3 base = palette[0];
         base = mix(base, palette[2], max(hair, brow));
@@ -129,13 +129,14 @@ function bodyMaterial(meta, dark) {
         float vHotOut = hot; float vWarmOut = warm;`)
       .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
         roughnessFactor = mix(roughnessFactor, 0.95, vCloth);
+        roughnessFactor = mix(roughnessFactor, 0.9, max(hair, brow));
         roughnessFactor = mix(roughnessFactor, 0.25, vEye);`)
       .replace('#include <dithering_fragment>', `#include <dithering_fragment>
         if (idMode > 0.5) gl_FragColor = vec4(vId * idStep / 255.0, 0.0, 0.0, 1.0);`)
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
         totalEmissiveRadiance += cPrimary * vHotOut * (0.08 + 0.30 * glow) + cSecondary * vWarmOut * 0.05;`);
   };
-  mat.customProgramCacheKey = () => 'hp-body-v3';
+  mat.customProgramCacheKey = () => 'hp-body-v4';
   return { mat, uniforms };
 }
 

@@ -29,6 +29,8 @@ ap.add_argument('--mh', required=True)
 ap.add_argument('--atlas', required=True)
 ap.add_argument('--out', required=True)
 ap.add_argument('--muscle', type=float, default=1.0, help='0..1 share of the max-muscle target')
+ap.add_argument('--athlete', type=float, default=1.0, help='0..1 strength of the per-muscle athletic shaping')
+ap.add_argument('--lean', type=float, default=0.55, help='0..1 move from average toward minimum body fat (more definition)')
 ap.add_argument('--flip-palm', action='store_true')
 args = ap.parse_args()
 MH = args.mh
@@ -55,7 +57,20 @@ def apply_target(name, w):
 
 for race in ('african', 'asian', 'caucasian'):
     apply_target(f'{race}-male-young', 1 / 3)
-apply_target('universal-male-young-maxmuscle-averageweight', args.muscle)
+apply_target('universal-male-young-maxmuscle-averageweight', args.muscle * (1 - args.lean))
+apply_target('universal-male-young-maxmuscle-minweight', args.muscle * args.lean)
+# Athletic V-taper: fuller chest, lats, shoulders and limbs, flat toned stomach.
+ATHLETE = {
+    'torso-muscle-pectoral-incr': 0.75, 'torso-muscle-dorsi-incr': 0.85, 'stomach-tone-incr': 1.0,
+    'r-upperarm-shoulder-muscle-incr': 0.8, 'l-upperarm-shoulder-muscle-incr': 0.8,
+    'r-upperarm-muscle-incr': 0.65, 'l-upperarm-muscle-incr': 0.65,
+    'r-lowerarm-muscle-incr': 0.45, 'l-lowerarm-muscle-incr': 0.45,
+    'r-upperleg-muscle-incr': 0.6, 'l-upperleg-muscle-incr': 0.6,
+    'r-lowerleg-muscle-incr': 0.45, 'l-lowerleg-muscle-incr': 0.45, 'neck-scale-horiz-incr': 0.25,
+}
+for name, w in ATHLETE.items():
+    if os.path.exists(os.path.join(MH, 't', name + '.target')):
+        apply_target(name, w * args.athlete)
 
 # ── 2. MakeHuman joints & axes ──────────────────────────────────────────
 skel = json.load(open(os.path.join(MH, 'default.mhskel')))
@@ -285,8 +300,8 @@ for it, wgt in ((4, 0.6), (16, 0.4)):
     d = np.einsum('ij,ij->i', smooth(P, it) - P, N)
     cav += wgt * d
 cav = smooth(cav[:, None], 2)[:, 0]
-ao = np.clip(1.0 - np.maximum(cav, 0) * 0.55, 0.45, 1.0)
-ao = np.clip(ao + np.minimum(cav, 0) * -0.05, 0, 1.06)  # ridges catch a touch more light
+ao = np.clip(1.0 - np.maximum(cav, 0) * 0.85, 0.4, 1.0)
+ao = np.clip(ao + np.minimum(cav, 0) * -0.08, 0, 1.06)  # ridges catch a touch more light
 
 # ── 6. Muscle heads from the atlas ──────────────────────────────────────
 am = atlas_meta
@@ -337,6 +352,23 @@ mid = np.argsort(-onehot, 1)[:, :2]
 mw = np.take_along_axis(onehot, mid, 1)
 mw = np.clip(mw / 0.55, 0, 1)  # full strength well inside a muscle, soft at its border
 
+# Muscle definition: shade the grooves where one muscle meets the next (from the atlas
+# labels), plus the linea alba and three tendinous lines of a six-pack.
+tot = onehot.sum(1); peak = onehot.max(1)
+border = np.clip((0.8 - peak / np.maximum(tot, 1e-6)) / 0.35, 0, 1) * np.clip(tot / 0.6, 0, 1)
+groove = smooth(border[:, None], 1)[:, 0]
+if 'abs.rectus' in HEADS:
+    ra = (onehot[:, HEADS.index('abs.rectus')] / np.maximum(tot, 1e-6) > 0.5) & (tot > 0.4) & ~is_eye
+    if ra.sum() > 20:
+        ys = P[ra, 1]; y0, y1 = np.percentile(ys, 4), np.percentile(ys, 96)
+        zc = np.median(P[ra, 2]); h = y1 - y0
+        six = np.exp(-((P[:, 2] - zc) / 1.1) ** 2) * 1.0
+        for f in (0.38, 0.6, 0.8):
+            six = np.maximum(six, np.exp(-((P[:, 1] - (y0 + f * h)) / (0.03 * h + 0.6)) ** 2) * 0.9)
+        groove = np.where(ra, np.maximum(groove, six), groove)
+groove = np.clip(groove, 0, 1)
+ao = np.clip(ao * (1 - 0.3 * groove) + 0.04 * (1 - groove) * (tot > 0.4), 0, 1.06)
+
 # ── 7. Paint: shorts, hair, eyes ───────────────────────────────────────
 # Stored as signed distances (positive = inside) so the shader can cut crisp,
 # straight edges across triangles instead of blotchy per-vertex colours.
@@ -355,10 +387,11 @@ side = np.abs(P[:, 2] - head_c[2])
 # Short hair: above a hairline that rises at the temples and drops behind the ears.
 hair = np.maximum.reduce([
     y - (eyes_y + 0.56 * span) - 0.10 * np.maximum(side - 4, 0) * 3,
-    np.minimum(-front - 1.0, y - (eyes_y - 0.05 * span)),
+    # Back of the head: the hairline dips to the nape in the middle and rises behind the ears.
+    np.minimum(-front - 1.0, y - (eyes_y - 0.42 * span) - 0.06 * span * (side / 4.5) ** 2),
     np.minimum(np.minimum(-front + 3.0, side - 6.2), y - (eyes_y + 0.30 * span)),
 ])
-hair = np.where((headw > 0.8) & ~is_eye, hair, -20.0)
+hair = np.where((headw > 0.45) & ~is_eye & (y > eyes_y - 0.75 * span), hair, -20.0)
 iris = np.full(nb, -1.0)
 for sd in (1, -1):
     m = is_eye & (np.sign(P[:, 2]) == sd)

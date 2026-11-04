@@ -12,6 +12,7 @@ import { EXERCISES, headRole } from '/src/data/exercises.js';
 import { rig } from '/src/lib/rig3d.js';
 import { buildBody, loadBody, poseBody, setHands, setRoles } from '/src/components/bodyModel.js';
 import { addFloor, addStudio, buildProps, defaultView, framing, makeMaterials } from '/src/components/scene3d.js';
+import { buildOverlays } from '/src/components/overlays3d.js';
 
 const only = new URLSearchParams(location.search).get('only');
 const log = (m) => { document.getElementById('log').textContent += m + '\n'; };
@@ -58,6 +59,9 @@ if (only !== 'map') {
     const update = buildProps(group, ex, mat, ox);
     const R = rig(ex, THUMB_T[ex.id] ?? 1, ox);
     poseBody(body, R); update(R);
+    // The bar path, so the list shows how each exercise moves.
+    const ov = buildOverlays(scene, ex, ox, { markers: false });
+    ov.setVisible({ path: true, forces: false }); ov.update(THUMB_T[ex.id] ?? 1, 'lift', 1);
     const cam = new THREE.PerspectiveCamera(30, 720 / 540, 1, 5000);
     const { az, el } = defaultView(ex); const d = size * 2.4;
     const a = (az * Math.PI) / 180; const e = (el * Math.PI) / 180;

@@ -241,6 +241,6 @@ export function defaultView(ex) {
   const lying = Math.abs(Math.sin((ex.A.torso * Math.PI) / 180)) < 0.6;
   const f0 = ex.focus[0];
   const back = BACK_MUSCLES.has(f0.split('.')[0]) || f0 === 'shoulders.rear';
-  if (lying) return { az: back ? 120 : 60, el: 40 };
-  return { az: ex.view === 'front' ? 18 : back ? 145 : 38, el: 10 };
+  if (lying) return { az: back ? 115 : 65, el: 34 };
+  return { az: ex.view === 'front' ? 14 : back ? 130 : 58, el: 8 };
 }
