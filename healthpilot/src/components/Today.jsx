@@ -1,3 +1,4 @@
+import { MealIcon } from './icons.jsx';
 import { useMemo } from 'react';
 import { useStore } from '../lib/store.jsx';
 import { dayTotals, entryTotals } from '../lib/nutrition.js';
@@ -46,7 +47,7 @@ export default function Today({ date, onAddFood, goTo }) {
         const items = day.entries.filter((e) => e.meal === m.id);
         const kcal = items.reduce((a, e) => a + entryTotals(e).kcal, 0);
         return (
-          <Card key={m.id} title={<>{m.icon} {m.label} {kcal > 0 && <span className="muted small">· {fmt(kcal)} kcal</span>}</>}
+          <Card key={m.id} title={<><MealIcon id={m.id} /> {m.label} {kcal > 0 && <span className="muted small">· {fmt(kcal)} kcal</span>}</>}
             action={<button className="btn ghost sm" onClick={() => onAddFood(m.id)}>+ Add</button>}>
             {items.length === 0 ? (
               <p className="muted small">Nothing yet.</p>

@@ -11,6 +11,8 @@ import Settings from './components/Settings.jsx';
 import Dashboard from './components/Dashboard.jsx';
 import Gym from './components/Gym.jsx';
 import { Sheet } from './components/ui.jsx';
+import { TAB_ICONS } from './components/icons.jsx';
+import { ChevronLeft, ChevronRight, Settings as SettingsIcon } from 'lucide-react';
 import { FOODS } from './data/foods.js';
 import { EXERCISES } from './data/exercises.js';
 
@@ -76,11 +78,11 @@ export default function App() {
       <header className="topbar">
         <div className="brand"><img src={`${import.meta.env.BASE_URL}icon.svg`} alt="" width="28" height="28" /><span>HealthPilot</span></div>
         <div className="date-nav">
-          <button className="icon-btn" aria-label="Previous day" onClick={() => setDate((d) => addDays(d, -1))}>‹</button>
+          <button className="icon-btn" aria-label="Previous day" onClick={() => setDate((d) => addDays(d, -1))}><ChevronLeft size={18} /></button>
           <button className="date-label" onClick={() => setDate(today)} title="Jump to today">{prettyDay(date, today)}</button>
-          <button className="icon-btn" aria-label="Next day" disabled={date >= today} onClick={() => setDate((d) => addDays(d, 1))}>›</button>
+          <button className="icon-btn" aria-label="Next day" disabled={date >= today} onClick={() => setDate((d) => addDays(d, 1))}><ChevronRight size={18} /></button>
         </div>
-        <button className="icon-btn" aria-label="Settings" onClick={() => setSettingsOpen(true)}>⚙️</button>
+        <button className="icon-btn" aria-label="Settings" onClick={() => setSettingsOpen(true)}><SettingsIcon size={20} /></button>
       </header>
 
       <main className="content">
@@ -96,7 +98,7 @@ export default function App() {
       <nav className="tabbar" aria-label="Main">
         {TABS.map((t) => (
           <button key={t.id} className={navTab === t.id ? 'on' : ''} aria-current={navTab === t.id ? 'page' : undefined} onClick={() => setTab(t.id)}>
-            <span aria-hidden="true">{t.icon}</span>
+            {(() => { const I = TAB_ICONS[t.id]; return <I size={22} strokeWidth={navTab === t.id ? 2.3 : 1.9} aria-hidden="true" />; })()}
             <small>{t.label}</small>
           </button>
         ))}

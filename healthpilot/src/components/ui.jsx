@@ -1,3 +1,4 @@
+import { iconTitle } from './icons.jsx';
 import { useEffect } from 'react';
 
 export function Ring({ value, max, size = 168, stroke = 14, color = 'var(--accent)', children, label }) {
@@ -70,11 +71,12 @@ export function Stepper({ value, onChange, step = 0.5, min = 0.25, label }) {
 }
 
 export function Card({ title, action, children, className = '' }) {
+  const { Icon, text } = iconTitle(title);
   return (
     <section className={`card ${className}`}>
       {(title || action) && (
         <div className="card-head">
-          {title && <h3>{title}</h3>}
+          {title && <h3>{Icon && <Icon size={17} strokeWidth={2.2} aria-hidden="true" />}{text}</h3>}
           {action}
         </div>
       )}

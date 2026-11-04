@@ -3,8 +3,8 @@ import { MUSCLES } from '../data/exercises.js';
 import { MUSCLE_COLOR } from './ExerciseFigure.jsx';
 
 /*
- * Front and back views of the real anatomy (BodyParts3D), pre-rendered by
- * tools/anatomy/render-assets.html as two images per view:
+ * Front and back views of the 3-D body, pre-rendered by
+ * tools/body/render-assets.html as two images per view:
  *   map-<view>-shade.webp  the lit body
  *   map-<view>-id.png      each muscle head painted a flat code colour (red channel = index × step)
  * Here every pixel is recoloured by what that muscle head means right now.
@@ -14,7 +14,7 @@ import { MUSCLE_COLOR } from './ExerciseFigure.jsx';
  *   heat       { chest: 0..2 }                  weekly training heat map (sets ÷ 10)
  *   selected + onPick(muscle)                   tap a muscle to filter
  */
-const BASE = `${import.meta.env.BASE_URL}anatomy/`;
+const BASE = `${import.meta.env.BASE_URL}body/`;
 let assets = null;
 
 function loadImage(src) {
@@ -66,28 +66,55 @@ function View({ name, data, colorFor, onPick, label }) {
 
   useEffect(() => {
     const { shade, id } = view;
-    const out = new ImageData(shade.width, shade.height);
+    const W = shade.width; const H = shade.height; const n = W * H;
+    // 1. Tint layer from the muscle-ID image.
+    const tint = new Float32Array(n * 4); // r, g, b, alpha
     const cache = new Map();
-    for (let i = 0; i < shade.data.length; i += 4) {
-      const a = shade.data[i + 3];
-      out.data[i + 3] = a;
-      let r = shade.data[i]; let g = shade.data[i + 1]; let b = shade.data[i + 2];
-      if (a > 0 && id.data[i + 3] > 128) {
-        const k = Math.round(id.data[i] / data.meta.step) - 1;
-        const key = data.meta.keys[k];
-        if (key) {
-          if (!cache.has(key)) cache.set(key, colorFor(key, key.split('.')[0] === hover));
-          const c = cache.get(key);
-          if (c) {
-            // Tint keeps the muscle's shading: blend shade with (shade × colour).
-            const L = (r + g + b) / 765 * 1.25;
-            r += (Math.min(255, c.rgb[0] * L) - r) * c.a;
-            g += (Math.min(255, c.rgb[1] * L) - g) * c.a;
-            b += (Math.min(255, c.rgb[2] * L) - b) * c.a;
+    for (let p = 0; p < n; p += 1) {
+      const i = p * 4;
+      if (!shade.data[i + 3] || id.data[i + 3] < 128) continue;
+      const key = data.meta.keys[Math.round(id.data[i] / data.meta.step) - 1];
+      if (!key) continue;
+      if (!cache.has(key)) cache.set(key, colorFor(key, key.split('.')[0] === hover));
+      const c = cache.get(key);
+      if (!c) continue;
+      tint[i] = c.rgb[0] * c.a; tint[i + 1] = c.rgb[1] * c.a; tint[i + 2] = c.rgb[2] * c.a; tint[i + 3] = c.a;
+    }
+    // 2. Soften the edges (two passes of a 5-px box blur, premultiplied), so regions read as smooth
+    //    patches of colour on the skin instead of jagged pixel islands.
+    const tmp = new Float32Array(n * 4);
+    const blur = (src, dst, dx, dy) => {
+      const R = 2;
+      for (let y = 0; y < H; y += 1) {
+        for (let x = 0; x < W; x += 1) {
+          let r = 0; let g = 0; let b = 0; let a = 0; let cnt = 0;
+          for (let k = -R; k <= R; k += 1) {
+            const xx = x + k * dx; const yy = y + k * dy;
+            if (xx < 0 || yy < 0 || xx >= W || yy >= H) continue;
+            const j = (yy * W + xx) * 4;
+            r += src[j]; g += src[j + 1]; b += src[j + 2]; a += src[j + 3]; cnt += 1;
           }
+          const o = (y * W + x) * 4;
+          dst[o] = r / cnt; dst[o + 1] = g / cnt; dst[o + 2] = b / cnt; dst[o + 3] = a / cnt;
         }
       }
-      out.data[i] = r; out.data[i + 1] = g; out.data[i + 2] = b;
+    };
+    if (cache.size) for (let pass = 0; pass < 2; pass += 1) { blur(tint, tmp, 1, 0); blur(tmp, tint, 0, 1); }
+    // 3. Composite: tint keeps the skin's shading (blend shade with shade × colour).
+    const out = new ImageData(W, H);
+    for (let p = 0; p < n; p += 1) {
+      const i = p * 4;
+      const a0 = shade.data[i + 3];
+      let r = shade.data[i]; let g = shade.data[i + 1]; let b = shade.data[i + 2];
+      const ta = a0 ? Math.min(1, tint[i + 3]) : 0;
+      if (ta > 0.01) {
+        const L = ((r + g + b) / 765) * 1.3;
+        const cr = tint[i] / tint[i + 3]; const cg = tint[i + 1] / tint[i + 3]; const cb = tint[i + 2] / tint[i + 3];
+        r += (Math.min(255, cr * L) - r) * ta;
+        g += (Math.min(255, cg * L) - g) * ta;
+        b += (Math.min(255, cb * L) - b) * ta;
+      }
+      out.data[i] = r; out.data[i + 1] = g; out.data[i + 2] = b; out.data[i + 3] = a0;
     }
     const cv = canvas.current;
     cv.width = shade.width; cv.height = shade.height;

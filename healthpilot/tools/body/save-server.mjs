@@ -1,12 +1,12 @@
 // Receives images rendered by render-assets.html and writes them into public/.
-// Usage: node tools/anatomy/save-server.mjs   (listens on 127.0.0.1:5174)
+// Usage: node tools/body/save-server.mjs   (listens on 127.0.0.1:5174)
 import { createServer } from 'node:http';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const PUBLIC = resolve(dirname(fileURLToPath(import.meta.url)), '../../public');
-const SAFE = /^(thumbs|anatomy)\/[a-z0-9-]+\.(webp|png|json)$/;
+const SAFE = /^(thumbs|body)\/[a-z0-9-]+\.(webp|png|json)$/;
 
 createServer((req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');

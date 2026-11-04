@@ -20,10 +20,10 @@ HealthifyMe is the market leader in India. These are the most common complaints 
 | Heavy app | Loads ~72 KB of gzipped JS |
 
 ### Features
-- **Home dashboard:** a day score from six habits (calories, protein, water, steps, sleep, workout), a checklist with one-tap actions, a 7-day habit grid, a real-anatomy front/back heat map of hard sets per muscle this week (10–20 sets is the common growth target), and recent personal records.
+- **Home dashboard:** a day score from six habits (calories, protein, water, steps, sleep, workout), a checklist with one-tap actions, a 7-day habit grid, a front/back muscle heat map on the 3-D body of hard sets per muscle this week (10–20 sets is the common growth target), and recent personal records.
 - **Gym:**
   - **5-day plans:** Push/Pull/Legs/Upper/Lower or a body-part split, scaled for beginner, intermediate or advanced. The app always starts the next day in the cycle.
-  - **61 exercises on real human anatomy:** each one plays on a 3-D body built from BodyParts3D (scanned human muscles and bones), with a bending spine and shoulder blades that rotate as the arm rises. The exact muscle head that should take the stress glows **red**, for example the upper chest on an incline press or the side delts on a lateral raise. Helper muscles glow **orange**, and the working joints are ringed. Trainer mode adds a rep counter, a countdown for each phase, a pinned "feel it here" tag, a load-direction arrow and spoken cues. You can rotate the body or use the front, side and back views. Each exercise also has form steps, breathing, common mistakes, alternatives and a YouTube form-video search.
+  - **61 exercises with a realistic 3-D athlete:** each exercise plays on a skinned human body (MakeHuman, CC0) with real skin, hands that grip the bar, studio lighting and soft shadows. The exact muscle head that should take the stress glows **red** through the skin (for example the upper chest on an incline press, or the side delts on a lateral raise). Supporting muscles are tinted **amber**. A tag pinned to the skin names the muscle, the rep counter and phase chip track the tempo, and spoken cues are optional. You can rotate the body or use the front, side and back views. An automated test checks every exercise so that no limb passes through the body, the equipment or the floor. Each exercise also has form steps, breathing, common mistakes, alternatives and a YouTube form-video search.
   - **Workout log:** last session's numbers beside every set, double-progression targets (add weight once every set hits the top of the rep range), warm-up/drop/failure sets, an automatic rest timer that vibrates, and PR badges using estimated 1-rep max (Epley).
 - **Today (meals):** calorie ring, protein/carbs/fat/fibre bars, meals grouped as breakfast/lunch/snacks/dinner, tap-to-fill water glasses, and the top coach insight.
 - **Log food:**
@@ -123,4 +123,4 @@ Nutrition values are estimates for typical home recipes (from IFCT 2017 and USDA
 
 ## Credits
 
-The 3-D anatomy is BodyParts3D, Copyright© The Database Center for Life Science, licensed by CC Attribution-Share Alike 2.1 Japan. The derived files in `public/anatomy/` and `public/thumbs/` are shared under the same licence. See `tools/anatomy/`.
+The 3-D body is based on the MakeHuman base mesh (CC0 1.0); see `tools/body/`. The muscle labels on its skin are derived from BodyParts3D, Copyright© The Database Center for Life Science, licensed by CC Attribution-Share Alike 2.1 Japan. The derived muscle data in `public/body/` and `public/thumbs/` is shared under the same licence. See `tools/anatomy/`.

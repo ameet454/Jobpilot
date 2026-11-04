@@ -29,9 +29,27 @@ function arm(neck, ua, fa, uaLen = 1) {
   const elbow = move(neck, ua, LEN.upperArm * uaLen);
   return { elbow, hand: move(elbow, fa, LEN.forearm) };
 }
-function leg(hip, th, sh, foot) {
+// The floor (2-D y) and how high the ankle joint sits above the sole of a flat foot.
+export const FLOOR_2D = 241;
+export const ANKLE_H = 10;
+const ANKLE_FLOOR = FLOOR_2D - ANKLE_H;
+
+function leg(hip, th, sh, foot, plant) {
   const knee = move(hip, th, LEN.thigh);
-  const ankle = move(knee, sh, LEN.shin);
+  let shin = sh;
+  // A flat foot near the floor stays planted on it: swing the shin about the knee so
+  // the ankle sits exactly one ankle-height above the floor.
+  if (plant && Math.abs(Math.sin(rad(foot))) < 0.5) {
+    const a0 = move(knee, sh, LEN.shin);
+    const dy = ANKLE_FLOOR - knee[1];
+    if (a0[1] > ANKLE_FLOOR - 6 && Math.abs(dy) < LEN.shin) {
+      const base = Math.asin(dy / LEN.shin) * (180 / Math.PI);
+      const c1 = base; const c2 = 180 - base;
+      const diff = (a, b) => Math.abs(((a - b + 540) % 360) - 180);
+      shin = diff(c1, sh) < diff(c2, sh) ? c1 : c2;
+    }
+  }
+  const ankle = move(knee, shin, LEN.shin);
   return { knee, ankle, toe: move(ankle, foot, LEN.foot) };
 }
 
@@ -45,7 +63,9 @@ export function solvePose(p) {
   const upper = p.torso + (p.spine ?? 0);
   let hip;
   if (p.anchor === 'ankle') {
-    const knee = move(p.at, p.sh + 180, LEN.shin);
+    // Standing: the ankle joint is one ankle-height above the floor.
+    const at = [p.at[0], Math.min(p.at[1], ANKLE_FLOOR)];
+    const knee = move(at, p.sh + 180, LEN.shin);
     hip = move(knee, p.th + 180, LEN.thigh);
   } else if (p.anchor === 'hand') {
     const elbow = move(p.at, p.fa + 180, LEN.forearm);
@@ -56,9 +76,10 @@ export function solvePose(p) {
   }
   const waist = move(hip, p.torso, LOWER);
   const neck = move(waist, upper, UPPER);
-  const near = { ...arm(neck, p.ua, p.fa, p.uaLen), ...leg(hip, p.th, p.sh, p.foot ?? 0) };
+  const plant = p.anchor !== 'ankle' && !p.free;
+  const near = { ...arm(neck, p.ua, p.fa, p.uaLen), ...leg(hip, p.th, p.sh, p.foot ?? 0, plant) };
   const farArm = arm(neck, p.ua2 ?? p.ua, p.fa2 ?? p.fa, p.uaLen);
-  const farLeg = leg(hip, p.th2 ?? p.th, p.sh2 ?? p.sh, p.foot2 ?? p.foot ?? 0);
+  const farLeg = leg(hip, p.th2 ?? p.th, p.sh2 ?? p.sh, p.foot2 ?? p.foot ?? 0, plant);
   return {
     hip, waist, neck, ...near,
     head: move(neck, upper + (p.head ?? 0), LEN.head),
@@ -82,8 +103,8 @@ export function frontJoints(p) {
   const hand = [elbow[0] + (armR.hand[0] - armR.elbow[0]), elbow[1] + (armR.hand[1] - armR.elbow[1])];
   // Seated: the thighs point at the viewer, so the knees sit just below the hips.
   const legR = p.seated
-    ? { knee: [hipR[0] + 2, hipR[1] + 4], ankle: [hipR[0] + 3, hipR[1] + 4 + LEN.shin], toe: [hipR[0] + 3, hipR[1] + 8 + LEN.shin] }
-    : solvePose({ ...p, anchor: 'hip', at: hipR });
+    ? { knee: [hipR[0] + 2, hipR[1] + 4], ankle: [hipR[0] + 3, ANKLE_FLOOR], toe: [hipR[0] + 3, ANKLE_FLOOR + 4] }
+    : solvePose({ ...p, anchor: 'hip', at: hipR, free: true });
   return {
     cx, neck: j.neck, hip: j.hip, head: [j.neck[0], j.neck[1] - 21],
     shR, elbowR: elbow, handR: hand, hipR, kneeR: legR.knee, ankleR: legR.ankle, toeR: legR.toe,
@@ -93,14 +114,14 @@ export function frontJoints(p) {
 }
 
 const lerp = (a, b, t) => a + (b - a) * t;
-const ANGLES = ['torso', 'spine', 'head', 'ua', 'fa', 'th', 'sh', 'foot', 'ua2', 'fa2', 'th2', 'sh2', 'foot2', 'uaLen', 'reach', 'shrug', 'wide', 'grip'];
+const ANGLES = ['torso', 'spine', 'head', 'ua', 'fa', 'th', 'sh', 'foot', 'ua2', 'fa2', 'th2', 'sh2', 'foot2', 'uaLen', 'reach', 'shrug', 'wide', 'grip', 'grip2'];
 
 /** Blend two key poses (t = 0 → a, t = 1 → b). */
 export function blendPose(a, b, t) {
   const out = { ...a, at: [lerp(a.at[0], b.at[0], t), lerp(a.at[1], b.at[1], t)] };
   for (const k of ANGLES) {
     if (a[k] == null && b[k] == null) continue;
-    if (k === 'grip' && (a[k] == null || b[k] == null)) continue; // no neutral value to blend from
+    if ((k === 'grip' || k === 'grip2') && (a[k] == null || b[k] == null)) continue; // no neutral value to blend from
     const fallback = k.endsWith('2') ? k.slice(0, -1) : null;
     const base = k === 'uaLen' || k === 'wide' ? 1 : 0;
     const va = a[k] ?? (fallback ? a[fallback] : base) ?? base;

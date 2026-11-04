@@ -10,6 +10,8 @@
 import { blendPose, frontJoints, LEN, solvePose, WAIST } from './pose.js';
 
 export const FLOOR_Y = 241;
+// Fist centre relative to the wrist, in the forearm's frame [along, front, side], from tools/body/build_body.py.
+export const GRIP = [11.5, 1.3, -3];
 // Half-widths measured from the BodyParts3D skeleton (same scale as pose.js LEN).
 const Z_SHOULDER = 22;
 const Z_HIP = 9;
@@ -30,6 +32,11 @@ export const v = {
 
 const unit2 = (a, b) => { const dx = b[0] - a[0]; const dy = b[1] - a[1]; const l = Math.hypot(dx, dy) || 1; return [dx / l, dy / l]; };
 const dot2 = (a, b) => a[0] * b[0] + a[1] * b[1];
+
+/** Where a bar resting on the upper back sits, given the chest frame. */
+export function backBarPoint(J, chest) {
+  return v.add(v.add(J.neck, v.mul(chest.f, -9)), v.mul(chest.u, 3));
+}
 
 /** Orthonormal frame for a bone: u along it, f its "front" (chest / quad side), l = u × f. */
 function frame(a, b, fHint) {
@@ -114,8 +121,8 @@ export function rig(ex, t, ox = 150) {
       const kneesOut = Math.max(0, Math.min(1, (hipFlex - 40) / 60)) * 9;
       J[`shoulder${s}`] = W(j.neck, s * Z_SHOULDER);
       // `grip` overrides the hand half-width (sumo deadlift: hands inside the knees).
-      J[`elbow${s}`] = W(src.elbow, s * (p.grip ? (Z_SHOULDER + p.grip) / 2 : Z_SHOULDER + 4));
-      J[`hand${s}`] = W(src.hand, s * (p.grip ?? Z_SHOULDER + 7));
+      J[`elbow${s}`] = W(src.elbow, s * (((s < 0 ? p.grip2 : null) ?? p.grip) ? (Z_SHOULDER + ((s < 0 ? p.grip2 : null) ?? p.grip)) / 2 : Z_SHOULDER + 4));
+      J[`hand${s}`] = W(src.hand, s * ((s < 0 ? p.grip2 : null) ?? p.grip ?? Z_SHOULDER + 7));
       J[`hip${s}`] = W(j.hip, s * Z_HIP);
       J[`knee${s}`] = W(src.knee, s * (Z_KNEE * wide + kneesOut));
       J[`ankle${s}`] = W(src.ankle, s * Z_ANKLE * wide * (wide > 1 ? 1.15 : 1));
@@ -139,6 +146,30 @@ export function rig(ex, t, ox = 150) {
     J[`sc${s}`] = sc;
     delta[s] = v.sub(sh1, sh0);
   }
+  // Bar across the upper back (squat, good morning): the hands reach back to it.
+  const backBar = ex.props?.find((pr) => pr.t === 'barbell' && pr.at === 'back');
+  if (backBar && ex.view !== 'front') {
+    const c = frame(J.waist, J.neck, upperF);
+    const bar = backBarPoint(J, c);
+    const L1 = LEN.upperArm; const L2 = LEN.forearm + GRIP[0];
+    for (const s of [1, -1]) {
+      const S = J[`shoulder${s}`];
+      const dx = bar[0] - S[0]; const dy = bar[1] - S[1];
+      const d = Math.min(L1 + L2 - 0.01, Math.max(Math.abs(L1 - L2) + 0.01, Math.hypot(dx, dy)));
+      const base = Math.atan2(dy, dx);
+      const k = Math.acos((L1 * L1 + d * d - L2 * L2) / (2 * L1 * d));
+      // Of the two elbow solutions take the lower one (elbows point down and back).
+      const e1 = [S[0] + L1 * Math.cos(base + k), S[1] + L1 * Math.sin(base + k)];
+      const e2 = [S[0] + L1 * Math.cos(base - k), S[1] + L1 * Math.sin(base - k)];
+      const e = e1[1] < e2[1] ? e1 : e2;
+      const fd = v.norm([bar[0] - e[0], bar[1] - e[1], 0]);
+      J[`elbow${s}`] = [e[0], e[1], s * (Z_SHOULDER + 5)];
+      J[`hand${s}`] = [e[0] + fd[0] * LEN.forearm, e[1] + fd[1] * LEN.forearm, s * (Z_SHOULDER + 9)];
+      hint[`ua${s}`] = v.norm(v.cross([0, 0, 1], v.sub(J[`elbow${s}`], S)));
+      hint[`fa${s}`] = v.norm(v.cross([0, 0, 1], v.sub(J[`hand${s}`], J[`elbow${s}`])));
+    }
+  }
+
   if (p.anchor === 'hand' && ex.view !== 'front') {
     // Hands stay on the bar: the body hangs lower instead of the hands rising.
     const m = v.mul(v.add(delta[1], delta[-1]), 0.5);
@@ -164,7 +195,14 @@ export function rig(ex, t, ox = 150) {
     // The top of the foot faces back up the shin.
     add('foot', J[`ankle${s}`], J[`toe${s}`], ex.view === 'front' ? [0, 1, 0] : v.sub(J[`knee${s}`], J[`ankle${s}`]));
   }
-  return { J, bones };
+  // Centre of the closed fist: where bars, dumbbells and handles sit.
+  const axes = {};
+  for (const s of [1, -1]) {
+    const fa = bones.find((b) => b.key === 'fa' && b.side === s);
+    J[`grip${s}`] = v.add(v.add(v.add(fa.b, v.mul(fa.u, GRIP[0])), v.mul(fa.f, GRIP[1])), v.mul(fa.l, GRIP[2] * s));
+    axes[`grip${s}`] = fa.l;
+  }
+  return { J, bones, axes };
 }
 
 /*

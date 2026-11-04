@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en"><head><meta charset="UTF-8" /><title>Render body assets</title></head>
+<body style="font: 13px system-ui; background: #eee">
+<p>Renders the exercise thumbnails and the body-map images from the 3-D body and sends them to
+<code>save-server.mjs</code> (run <code>node tools/body/save-server.mjs</code> first). Open through the Vite dev server:
+<code>/tools/body/render-assets.html</code>. Add <code>?only=thumbs</code> or <code>?only=map</code> to do one part.</p>
+<pre id="log"></pre>
+<div id="out" style="display:flex;flex-wrap:wrap;gap:4px"></div>
+<script type="module">
+import * as THREE from 'three';
+import { EXERCISES, headRole } from '/src/data/exercises.js';
+import { rig } from '/src/lib/rig3d.js';
+import { buildBody, loadBody, poseBody, setHands, setRoles } from '/src/components/bodyModel.js';
+import { addFloor, addStudio, buildProps, defaultView, framing, makeMaterials } from '/src/components/scene3d.js';
+
+const only = new URLSearchParams(location.search).get('only');
+const log = (m) => { document.getElementById('log').textContent += m + '\n'; };
+const SAVE = 'http://127.0.0.1:5174/?name=';
+const save = (name, dataUrl) => fetch(SAVE + name, { method: 'POST', body: dataUrl });
+const show = (url, w) => { const i = new Image(); i.src = url; i.width = w; document.getElementById('out').append(i); };
+
+const data = await loadBody();
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
+renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+/** Trim transparent margins, then fit the content into a w×h frame with a little padding. */
+function cropToContent(src, w, h) {
+  const c = document.createElement('canvas'); c.width = src.width; c.height = src.height;
+  const g = c.getContext('2d'); g.drawImage(src, 0, 0);
+  const { data: px } = g.getImageData(0, 0, c.width, c.height);
+  let x0 = c.width; let y0 = c.height; let x1 = 0; let y1 = 0;
+  for (let y = 0; y < c.height; y += 1) for (let x = 0; x < c.width; x += 1) {
+    if (px[(y * c.width + x) * 4 + 3] > 20) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+  }
+  const pad = 8; const bw = x1 - x0 + 1; const bh = y1 - y0 + 1;
+  const k = Math.min((w - 2 * pad) / bw, (h - 2 * pad) / bh);
+  const out = document.createElement('canvas'); out.width = w; out.height = h;
+  out.getContext('2d').drawImage(c, x0, y0, bw, bh, (w - bw * k) / 2, (h - bh * k) / 2, bw * k, bh * k);
+  return out.toDataURL('image/webp', 0.9);
+}
+
+/* ── Exercise thumbnails: key pose, target red, helpers amber, soft shadow ── */
+const THUMB_T = { deadlift: 0.15, 'barbell-row': 1, plank: 0.5, 'mountain-climber': 0 };
+if (only !== 'map') {
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.setPixelRatio(1);
+  renderer.setSize(720, 540);
+  for (const ex of EXERCISES) {
+    const scene = new THREE.Scene(); addStudio(renderer, scene);
+    const mat = makeMaterials(false);
+    const { ox, cy, size } = framing(ex);
+    if (!ex.noFloor) addFloor(scene, mat);
+    const body = buildBody(data); setRoles(body, (h) => headRole(ex, h)); setHands(body, ex.hands);
+    body.uniforms.glow.value = 0.9;
+    scene.add(body.mesh);
+    const group = new THREE.Group(); scene.add(group);
+    const update = buildProps(group, ex, mat, ox);
+    const R = rig(ex, THUMB_T[ex.id] ?? 1, ox);
+    poseBody(body, R); update(R);
+    const cam = new THREE.PerspectiveCamera(30, 720 / 540, 1, 5000);
+    const { az, el } = defaultView(ex); const d = size * 2.4;
+    const a = (az * Math.PI) / 180; const e = (el * Math.PI) / 180;
+    cam.position.set(Math.cos(e) * Math.cos(a) * d, cy + Math.sin(e) * d, Math.cos(e) * Math.sin(a) * d);
+    cam.lookAt(0, cy, 0);
+    renderer.setClearColor(0x000000, 0);
+    renderer.render(scene, cam);
+    const url = cropToContent(renderer.domElement, 240, 180);
+    show(url, 160);
+    await save(`thumbs/${ex.id}.webp`, url);
+    log(`thumb ${ex.id}`);
+  }
+}
+
+/* ── Body map: front + back, a lit "shade" image and a flat "id" image ── */
+if (only !== 'thumbs') {
+  const MAP_POSE = { id: 'map', view: 'front', props: [], primary: [], secondary: [], focus: [], helpers: [],
+    A: { at: [150, 133], torso: -90, ua: 80, fa: 84, th: 92, sh: 90 }, B: { at: [150, 133], torso: -90, ua: 80, fa: 84, th: 92, sh: 90 } };
+  const keys = data[0].heads;
+  const W = 300; const H = 600;
+  renderer.setPixelRatio(1);
+  renderer.setSize(W, H);
+  for (const [view, x] of [['front', 1], ['back', -1]]) {
+    for (const pass of ['shade', 'id']) {
+      THREE.ColorManagement.enabled = pass === 'shade';
+      renderer.outputColorSpace = pass === 'shade' ? THREE.SRGBColorSpace : THREE.LinearSRGBColorSpace;
+      renderer.toneMapping = pass === 'shade' ? THREE.ACESFilmicToneMapping : THREE.NoToneMapping;
+      const scene = new THREE.Scene();
+      if (pass === 'shade') addStudio(renderer, scene, { shadows: false });
+      const body = buildBody(data);
+      body.uniforms.idMode.value = pass === 'id' ? 1 : 0;
+      scene.add(body.mesh);
+      const R = rig(MAP_POSE, 0);
+      poseBody(body, R);
+      const top = R.J.head[1] + 22; const bottom = 0;
+      const half = (top - bottom) / 2 + 4; const mid = (top + bottom) / 2;
+      const cam = new THREE.OrthographicCamera(-half / 2, half / 2, half, -half, 1, 1000);
+      cam.position.set(x * 400, mid, 0); cam.lookAt(0, mid, 0);
+      renderer.setClearColor(0x000000, 0);
+      renderer.render(scene, cam);
+      const url = renderer.domElement.toDataURL(pass === 'shade' ? 'image/webp' : 'image/png', 0.92);
+      show(url, 150);
+      await save(`body/map-${view}-${pass}.${pass === 'shade' ? 'webp' : 'png'}`, url);
+      log(`map ${view} ${pass}`);
+    }
+  }
+  await save('body/map.json', JSON.stringify({ keys, step: 7 }));
+}
+log('DONE');
+document.body.dataset.done = '1';
+</script></body></html>

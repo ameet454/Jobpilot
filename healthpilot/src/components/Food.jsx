@@ -80,7 +80,7 @@ export default function Food({ date, meal, setMeal, onDone }) {
 
   return (
     <div className="stack with-footer">
-      <Segmented value={meal} onChange={setMeal} options={MEALS.map((m) => ({ value: m.id, label: `${m.icon} ${m.label}` }))} small />
+      <Segmented value={meal} onChange={setMeal} options={MEALS.map((m) => ({ value: m.id, label: m.label }))} small />
 
       <Card className="smart">
         <label htmlFor="smart" className="smart-label">Type it like a text message</label>
@@ -238,7 +238,7 @@ function PlanSheet({ open, onClose, targets, diet, onLog }) {
         return (
           <div key={m.id} className="plan-meal">
             <div className="row between">
-              <b>{m.icon} {m.label} <span className="muted small">· {fmt(pm.kcal)} kcal · P {pm.p} g</span></b>
+              <b>{m.label} <span className="muted small">· {fmt(pm.kcal)} kcal · P {pm.p} g</span></b>
               <button className="btn sm" disabled={logged[`${seed}-${m.id}`]}
                 onClick={() => { onLog(m.id, pm.items); setLogged((l) => ({ ...l, [`${seed}-${m.id}`]: true })); }}>
                 {logged[`${seed}-${m.id}`] ? '✓ Logged' : 'Log'}

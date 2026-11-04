@@ -152,27 +152,26 @@ describe('store + dashboard', () => {
   });
 });
 
-describe('3-D anatomy rig', async () => {
+describe('3-D body rig', async () => {
   const { readFileSync } = await import('node:fs');
   const { rig, workingJoints, muscles } = await import('../src/lib/rig3d.js');
-  const anatomy = JSON.parse(readFileSync(new URL('../public/anatomy/anatomy.json', import.meta.url)));
+  const body = JSON.parse(readFileSync(new URL('../public/body/body.json', import.meta.url)));
 
-  it('the packed anatomy matches the rig bones and carries the licence credit', () => {
+  it('the packed body matches the rig bones and tags every muscle head', () => {
     const rigBones = new Set(rig(EXERCISE_BY_ID['bench-press'], 0.5).bones.map((b) => (b.side ? `${b.key}${b.side}` : b.key)));
-    for (const b of anatomy.bones) {
+    for (const b of body.bones) {
       if (b === 'head' || b.startsWith('hand')) continue; // derived from torso / forearm
       expect(rigBones.has(b), b).toBe(true);
     }
-    expect(anatomy.credit).toMatch(/BodyParts3D.*Database Center for Life Science.*Share Alike 2\.1 Japan/);
-    const groups = anatomy.groups.map((g) => g.group);
-    for (const m of Object.keys(MUSCLES)) expect(groups.some((g) => g.split('.')[0] === m), m).toBe(true);
-    // Every head an exercise points at exists in the model, and gets an anchor for the label.
+    expect(body.credit).toMatch(/MakeHuman.*CC0/);
+    for (const m of Object.keys(MUSCLES)) expect(body.heads.some((g) => g.split('.')[0] === m), m).toBe(true);
+    // Every head an exercise points at exists in the model, and the target gets an anchor for the label.
     for (const ex of EXERCISES) {
       for (const key of [...ex.focus, ...ex.helpers]) {
-        expect(groups.some((g) => g === key || g.split('.')[0] === key), `${ex.id}: ${key}`).toBe(true);
+        expect(body.heads.some((g) => g === key || g.split('.')[0] === key), `${ex.id}: ${key}`).toBe(true);
       }
       const f = ex.focus[0];
-      expect(Object.keys(anatomy.anchors).some((a) => a === f || a.split('.')[0] === f), `${ex.id} anchor`).toBe(true);
+      expect(Object.keys(body.anchors).some((a) => a === f || a.split('.')[0] === f.split('.')[0]), `${ex.id} anchor`).toBe(true);
     }
   });
 

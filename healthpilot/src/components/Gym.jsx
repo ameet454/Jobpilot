@@ -9,6 +9,9 @@ import { FORM_CHECK_IDS } from '../data/formcheckIds.js';
 import ExerciseFigure, { FigureSvg, MUSCLE_COLOR } from './ExerciseFigure.jsx';
 import BodyMap from './BodyMap.jsx';
 import { Card, Segmented, Sheet, fmt } from './ui.jsx';
+import {
+  Camera, Check, ChevronDown, ChevronRight, Clock, Dumbbell, Gauge, PlayCircle, Target, TrendingUp, Trophy, Wind, X,
+} from 'lucide-react';
 
 // The 3-D trainer pulls in WebGL code, so it loads only when an exercise is opened.
 const Exercise3D = lazy(() => import('./Exercise3D.jsx'));
@@ -16,6 +19,7 @@ const Exercise3D = lazy(() => import('./Exercise3D.jsx'));
 const FormCheck = lazy(() => import('./FormCheck.jsx'));
 
 const WEEK = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
+const cap = (t) => (t ? t[0].toUpperCase() + t.slice(1) : t);
 const mmss = (s) => `${Math.floor(s / 60)}:${String(Math.max(0, Math.floor(s % 60))).padStart(2, '0')}`;
 const repsLabel = (ex, [lo, hi]) => (ex.unit === 'time' ? `${lo}–${hi} s` : `${lo}–${hi} reps`);
 
@@ -50,16 +54,25 @@ export function ExerciseSheet({ id, onClose, onOpen }) {
   return (
     <Sheet open={!!ex} onClose={onClose} title={ex?.name || ''} wide>
       {ex && (
-        <div className="stack">
+        <div className="stack ex-detail">
           {/* Pause the 3-D trainer while the camera runs: phones cannot drive both smoothly. */}
           {checking ? <ExerciseFigure ex={ex} /> : (
-            <Suspense fallback={<ExerciseFigure ex={ex} />}>
+            <Suspense fallback={<div className="v-stage v-fallback"><div className="v-loading"><span className="spinner" />Loading 3-D coach…</div></div>}>
               <Exercise3D key={ex.id} ex={ex} />
             </Suspense>
           )}
+          <div className="ex-facts">
+            <span><Dumbbell size={15} />{cap(ex.equipment)}</span>
+            <span><Gauge size={15} />{cap(ex.level)}</span>
+            <span><Clock size={15} />{ex.tempo.lift}s up · {ex.tempo.lower}s down</span>
+          </div>
+          <div className="feel">
+            <Target size={20} aria-hidden="true" />
+            <div><b>Where you should feel it</b><p>{ex.feel}</p></div>
+          </div>
           {FORM_CHECK_IDS.includes(ex.id) && (
             <>
-              <button type="button" className="btn primary block" onClick={() => setChecking(true)}>📷 Form check — count reps and spot mistakes</button>
+              <button type="button" className="btn dark block" onClick={() => setChecking(true)}><Camera size={18} />Check my form with the camera</button>
               {checking && (
                 <Suspense fallback={<div className="fc-loading muted small center">Opening the camera coach…</div>}>
                   <FormCheck ex={ex} onClose={() => setChecking(false)} />
@@ -67,38 +80,48 @@ export function ExerciseSheet({ id, onClose, onOpen }) {
               )}
             </>
           )}
-          <div className="feel">
-            <b>🎯 Where you should feel it</b>
-            <p>{ex.feel}</p>
-          </div>
           <Card title="Muscles worked">
             <BodyMap roles={(k) => headRole(ex, k)} />
             <MusclePills ex={ex} all />
           </Card>
           <Card title="How to do it">
-            <ol className="how">{ex.steps.map((s) => <li key={s}>{s}</li>)}</ol>
-            <p className="small"><b>Breathing:</b> {ex.breathe}</p>
-            <p className="small"><b>Tempo:</b> {ex.tempo.lift}s lift · {ex.tempo.squeeze}s squeeze · {ex.tempo.lower}s lower — the animation moves at this speed.</p>
+            <ol className="steps">{ex.steps.map((s2) => <li key={s2}>{s2}</li>)}</ol>
+            <div className="ex-notes">
+              <p><Wind size={16} aria-hidden="true" /><span><b>Breathing</b>{ex.breathe}</span></p>
+              <p><Clock size={16} aria-hidden="true" /><span><b>Tempo</b>{ex.tempo.lift}s lift · {ex.tempo.squeeze}s squeeze · {ex.tempo.lower}s lower. The 3-D coach moves at this speed.</span></p>
+            </div>
           </Card>
           <Card title="⚠️ Common mistakes">
-            <ul className="mistakes">{ex.mistakes.map((m) => <li key={m}>{m}</li>)}</ul>
+            <ul className="mistakes">{ex.mistakes.map((m) => <li key={m}><X size={15} aria-hidden="true" />{m}</li>)}</ul>
           </Card>
-          <a className="btn block video" href={videoSearchUrl(ex)} target="_blank" rel="noopener noreferrer">▶ Watch form videos on YouTube</a>
-          <p className="muted small center">Opens a YouTube search for this exercise so you can compare a few coaches.</p>
           {(pr || last) && (
             <Card title="Your numbers">
               <div className="kv-grid">
                 {pr && <div className="kv"><span>Best {ex.unit === 'time' ? 'hold' : 'est. 1-rep max'}</span><b>{ex.unit === 'time' ? `${pr.reps} s` : `${fmt(pr.value, 1)} kg`}</b><span>{pr.kg ? `${pr.kg} kg × ${pr.reps}` : ''} · {shortDay(pr.date)}</span></div>}
-                {last && <div className="kv"><span>Last session · {shortDay(last.date)}</span><b>{last.sets.map((s) => (s.kg ? `${s.kg}×${s.reps}` : `${s.reps}`)).join(', ')}</b></div>}
+                {last && <div className="kv"><span>Last session · {shortDay(last.date)}</span><b>{last.sets.map((x) => (x.kg ? `${x.kg}×${x.reps}` : `${x.reps}`)).join(', ')}</b></div>}
               </div>
             </Card>
           )}
           {ex.alts.length > 0 && (
             <Card title="Alternatives">
-              <div className="chips">{ex.alts.map((a) => <button key={a} type="button" className="chip" onClick={() => onOpen(a)}>{EXERCISE_BY_ID[a].name}</button>)}</div>
+              <ul className="ex-list">
+                {ex.alts.map((a2) => {
+                  const alt = EXERCISE_BY_ID[a2];
+                  return (
+                    <li key={a2}>
+                      <button type="button" onClick={() => onOpen(a2)}>
+                        <Thumb ex={alt} />
+                        <span className="grow"><b>{alt.name}</b><span className="muted small">{alt.equipment}</span></span>
+                        <ChevronRight size={18} className="chev" aria-hidden="true" />
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
             </Card>
           )}
-          <p className="muted small">General guidance, not medical advice. Stop if you feel sharp pain, and ask a trainer to check your form in person.</p>
+          <a className="btn block" href={videoSearchUrl(ex)} target="_blank" rel="noopener noreferrer"><PlayCircle size={18} />Compare form videos on YouTube</a>
+          <p className="muted small center">General guidance, not medical advice. Stop if you feel sharp pain, and ask a trainer to check your form in person.</p>
         </div>
       )}
     </Sheet>
@@ -133,9 +156,9 @@ function PlanView({ date, onStart, onOpen }) {
           <section key={d.id} className={`card day ${isNext ? 'next' : ''}`}>
             <button type="button" className="day-head" onClick={() => setOpen(open === d.id ? null : d.id)} aria-expanded={open === d.id}>
               <span className="day-num">Day {i + 1}<small>{WEEK[i]}</small></span>
-              <span className="grow"><b>{d.icon} {d.name}</b><span className="muted small">{d.focus} · {d.exercises.length} exercises</span></span>
+              <span className="grow"><b>{d.name}</b><span className="muted small">{d.focus} · {d.exercises.length} exercises</span></span>
               {isNext && <span className="badge">Next</span>}
-              <span aria-hidden="true">{open === d.id ? '▴' : '▾'}</span>
+              <ChevronDown size={18} className={`chev ${open === d.id ? 'up' : ''}`} aria-hidden="true" />
             </button>
             {open === d.id && (
               <>
@@ -147,7 +170,7 @@ function PlanView({ date, onStart, onOpen }) {
                         <button type="button" onClick={() => onOpen(item.id)}>
                           <Thumb ex={ex} />
                           <span className="grow"><b>{ex.name}</b><span className="muted small">{item.sets} sets × {repsLabel(ex, item.reps)} · rest {mmss(item.rest)}</span><MusclePills ex={ex} /></span>
-                          <span className="muted" aria-hidden="true">›</span>
+                          <ChevronRight size={18} className="chev" aria-hidden="true" />
                         </button>
                       </li>
                     );
@@ -208,7 +231,7 @@ function WorkoutView({ date, onOpen, goPlan, onStart }) {
     const next = nextPlanDay(state.workouts, days, date);
     return (
       <Card className="empty-workout">
-        <p className="big-emoji" aria-hidden="true">{next.icon}</p>
+        <span className="hero-icon" aria-hidden="true"><Dumbbell size={28} /></span>
         <h2>Today: {next.name}</h2>
         <p className="muted">{next.focus} · {next.exercises.length} exercises · about {Math.round(next.exercises.reduce((a, e) => a + e.sets * (45 + e.rest), 0) / 60)} min</p>
         <button type="button" className="btn primary block" onClick={() => onStart(next)}>Start workout</button>
@@ -227,7 +250,7 @@ function WorkoutView({ date, onOpen, goPlan, onStart }) {
     return (
       <div className="stack">
         <Card className="summary">
-          <p className="big-emoji" aria-hidden="true">🏆</p>
+          <span className="hero-icon gold" aria-hidden="true"><Trophy size={28} /></span>
           <h2>{day?.name || 'Workout'} done!</h2>
           <div className="stats">
             <div className="stat"><b>{stats.sets}</b><span>sets</span></div>
@@ -238,7 +261,7 @@ function WorkoutView({ date, onOpen, goPlan, onStart }) {
           {prsToday.length > 0 && (
             <div className="prs">
               <b>New personal records</b>
-              <ul className="plain">{prsToday.map((s) => <li key={s.id}>🥇 {EXERCISE_BY_ID[s.exId].name}: {s.kg ? `${s.kg} kg × ${s.reps}` : `${s.reps}`}</li>)}</ul>
+              <ul className="plain">{prsToday.map((s) => <li key={s.id}><Trophy size={14} /> {EXERCISE_BY_ID[s.exId].name}: {s.kg ? `${s.kg} kg × ${s.reps}` : `${s.reps}`}</li>)}</ul>
             </div>
           )}
         </Card>
@@ -256,7 +279,7 @@ function WorkoutView({ date, onOpen, goPlan, onStart }) {
     <div className="stack with-rest">
       <Card className="session-head">
         <div className="row between">
-          <div><h2>{day?.icon} {day?.name || 'Workout'}</h2><span className="muted small">{Math.round((Date.now() - w.startedAt) / 60000)} min · {stats.sets}/{w.sets.length} sets · {fmt(stats.volume)} kg</span></div>
+          <div><h2>{day?.name || 'Workout'}</h2><span className="muted small">{Math.round((Date.now() - w.startedAt) / 60000)} min · {stats.sets}/{w.sets.length} sets · {fmt(stats.volume)} kg</span></div>
           <button type="button" className="btn primary" disabled={!stats.sets} onClick={() => { setRest(null); dispatch({ type: 'WORKOUT_FINISH', date }); }}>Finish</button>
         </div>
         <div className="bar"><div style={{ width: `${(stats.sets / Math.max(1, w.sets.length)) * 100}%`, background: 'var(--accent)' }} /></div>
@@ -276,11 +299,11 @@ function WorkoutView({ date, onOpen, goPlan, onStart }) {
               <span className="grow">
                 <b>{ex.name}</b>
                 <span className="muted small">Target {item.sets} × {repsLabel(ex, item.reps)} · rest {mmss(item.rest)}</span>
-                <span className="small feel-line">🎯 {ex.feel.split('.')[0]}.</span>
+                <span className="small feel-line"><Target size={13} aria-hidden="true" /> {ex.feel.split('.')[0]}.</span>
               </span>
               <span className="how-link">How?</span>
             </button>
-            {next && <p className="tip small">📈 {next.why}</p>}
+            {next && <p className="tip small"><TrendingUp size={14} aria-hidden="true" /> {next.why}</p>}
             <table className="sets">
               <thead><tr><th>Set</th><th>Last</th>{!timed && <th>kg</th>}<th>{timed ? 'sec' : 'reps'}</th><th aria-label="Done" /></tr></thead>
               <tbody>
@@ -303,7 +326,7 @@ function WorkoutView({ date, onOpen, goPlan, onStart }) {
                           onClick={() => {
                             update(s.id, { done: !s.done });
                             if (!s.done) setRest({ endsAt: Date.now() + item.rest * 1000, total: item.rest });
-                          }}>✓</button>
+                          }}><Check size={16} strokeWidth={3} /></button>
                         {pr && <span className="pr-badge" title="New personal record">PR</span>}
                       </td>
                     </tr>
@@ -348,7 +371,7 @@ function LibraryView({ onOpen }) {
               <button type="button" onClick={() => onOpen(ex.id)}>
                 <Thumb ex={ex} />
                 <span className="grow"><b>{ex.name}</b><span className="muted small">{ex.equipment} · {ex.level}</span><MusclePills ex={ex} /></span>
-                <span className="muted" aria-hidden="true">›</span>
+                <ChevronRight size={18} className="chev" aria-hidden="true" />
               </button>
             </li>
           ))}
@@ -372,9 +395,9 @@ export default function Gym({ date }) {
   return (
     <div className="stack">
       <Segmented value={view} onChange={setView} options={[
-        { value: 'plan', label: '🗓️ 5-day plan' },
-        { value: 'workout', label: active && !active.finishedAt ? '🔴 Workout' : '🏋️ Workout' },
-        { value: 'library', label: '📚 Exercises' },
+        { value: 'plan', label: 'Plan' },
+        { value: 'workout', label: active && !active.finishedAt ? <span className="live">Workout</span> : 'Workout' },
+        { value: 'library', label: 'Exercises' },
       ]} />
       {view === 'plan' && <PlanView date={date} onStart={start} onOpen={setDetail} />}
       {view === 'workout' && <WorkoutView date={date} onOpen={setDetail} goPlan={() => setView('plan')} onStart={start} />}

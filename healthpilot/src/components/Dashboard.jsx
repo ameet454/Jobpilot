@@ -1,3 +1,4 @@
+import { CheckCircle2, Droplet, Dumbbell, Egg, Flame, Footprints, Moon } from 'lucide-react';
 import { useMemo } from 'react';
 import { useStore } from '../lib/store.jsx';
 import { HABITS, habitHistory, habitProgress, dayScore, SLEEP_TARGET, WORKOUTS_PER_WEEK } from '../lib/dashboard.js';
@@ -12,7 +13,7 @@ function HabitRow({ h, value, detail, action }) {
   const hit = value >= 1;
   return (
     <li className={`habit ${hit ? 'hit' : ''}`}>
-      <span className="habit-icon" aria-hidden="true">{hit ? '✅' : h.icon}</span>
+      <span className={`habit-icon ${hit ? 'hit' : ''}`} aria-hidden="true">{(() => { const I = hit ? CheckCircle2 : HABIT_ICON[h.id]; return <I size={20} />; })()}</span>
       <span className="grow">
         <span className="row between"><b>{h.label}</b><span className="muted small">{detail}</span></span>
         <span className="bar"><span style={{ width: `${Math.round(value * 100)}%`, background: hit ? 'var(--good)' : 'var(--accent)' }} /></span>
@@ -21,6 +22,8 @@ function HabitRow({ h, value, detail, action }) {
     </li>
   );
 }
+
+const HABIT_ICON = { kcal: Flame, protein: Egg, water: Droplet, steps: Footprints, sleep: Moon, workout: Dumbbell };
 
 export default function Dashboard({ date, goTo }) {
   const { state, dispatch, targets } = useStore();
@@ -69,7 +72,7 @@ export default function Dashboard({ date, goTo }) {
           <p><b>Rest day 😌</b> <span className="muted small">You've done {thisWeek} workouts this week. Recovery is when muscle grows.</span></p>
         ) : (
           <div className="row between">
-            <div><b>{next.icon} {next.name}</b><p className="muted small">{next.focus} · {next.exercises.length} exercises</p></div>
+            <div><b>{next.name}</b><p className="muted small">{next.focus} · {next.exercises.length} exercises</p></div>
             <button type="button" className="btn primary sm" onClick={() => goTo('gym')}>Start</button>
           </div>
         )}
@@ -94,7 +97,7 @@ export default function Dashboard({ date, goTo }) {
           </div>
           {HABITS.map((h) => (
             <div role="row" className="hg-row" key={h.id}>
-              <span role="rowheader" title={h.label}>{h.icon}</span>
+              <span role="rowheader" title={h.label} aria-label={h.label}>{(() => { const I = HABIT_ICON[h.id]; return <I size={16} />; })()}</span>
               {history.map((d) => {
                 const v = d.progress[h.id];
                 return <span role="cell" key={d.date} className={`hg-cell ${v >= 1 ? 'hit' : v > 0 ? 'part' : ''}`} title={`${shortDay(d.date)} · ${h.label}: ${Math.round(v * 100)}%`} />;
