@@ -5,6 +5,7 @@
 #
 #   bash docker-deploy.sh medreglens.tech            # asks before replacing the old app
 #   YES=1 bash docker-deploy.sh medreglens.tech      # no questions
+#   bash docker-deploy.sh medreglens.tech --inspect  # only show what it finds
 #
 # What it does
 #   1. Finds Traefik and whatever container serves the domain today (cdsco, or
@@ -38,7 +39,8 @@ c_info() { printf '\033[36m➜ %s\033[0m\n' "$*"; }
 c_warn() { printf '\033[33m! %s\033[0m\n' "$*"; }
 die()    { printf '\033[31m✘ %s\033[0m\n' "$*" >&2; exit 1; }
 
-[ -n "$DOMAIN" ] || die "Usage: bash docker-deploy.sh yourdomain.com"
+INSPECT=""; [ "${2:-}" = "--inspect" ] && INSPECT=1
+[ -n "$DOMAIN" ] || die "Usage: bash docker-deploy.sh yourdomain.com [--inspect]"
 [ "$(id -u)" -eq 0 ] || die "Run as root (or with sudo)."
 command -v docker >/dev/null || die "Docker is not installed on this server."
 docker info >/dev/null 2>&1 || die "Docker is installed but not running."
@@ -52,6 +54,42 @@ if [ -z "$TRAEFIK" ]; then
   BRANCH="$BRANCH" OLD_APP="$OLD_APP" exec bash "$SCRIPT" "$DOMAIN"
 fi
 c_ok "Traefik found: $TRAEFIK"
+
+# Printed when something does not fit, so the output shows how this server is set up.
+diag() {
+  echo; echo "──── Diagnosis (safe to share: no passwords or keys) ────"
+  docker inspect -f 'traefik image={{.Config.Image}} network_mode={{.HostConfig.NetworkMode}} networks={{range $k, $v := .NetworkSettings.Networks}}{{$k}} {{end}}' "$TRAEFIK" 2>/dev/null || true
+  echo "traefik args: $(docker inspect -f '{{join .Args " "}}' "$TRAEFIK" 2>/dev/null | grep -oE -- '--(entrypoints|providers|certificatesresolvers)[^ =]*(=[^ ]*)?' | grep -viE 'email|token|key|password' | tr '\n' ' ' || true)"
+  echo "traefik mounts: $(docker inspect -f '{{range .Mounts}}{{.Source}}->{{.Destination}} {{end}}' "$TRAEFIK" 2>/dev/null)"
+  echo "containers with Traefik routers:"
+  for c in $(docker ps -a --format '{{.Names}}'); do
+    r="$(label_rules "$c" | grep '\.rule=' | cut -d= -f2- | tr '\n' ';' || true)"
+    if [ -n "$r" ]; then echo "  $c [$(docker inspect -f '{{.State.Status}} {{range $k, $v := .NetworkSettings.Networks}}{{$k}} {{end}}' "$c")] $r"; fi
+  done
+  echo "──────────────────────────────────────────────────────"
+  return 0
+}
+
+# Entrypoints and certificate resolvers from a mounted static config file (traefik.yml / .toml).
+static_conf() {
+  command -v python3 >/dev/null || return 0
+  for m in $(docker inspect -f '{{range .Mounts}}{{.Source}} {{end}}' "$TRAEFIK" 2>/dev/null); do
+    for f in "$m" "$m/traefik.yml" "$m/traefik.yaml" "$m/traefik.toml"; do
+      [ -f "$f" ] || continue
+      case "$f" in *.yml|*.yaml|*.toml) ;; *) continue ;; esac
+      python3 - "$f" <<'PY' 2>/dev/null || true
+import re, sys
+t = open(sys.argv[1]).read()
+eps = re.findall(r'(?ms)^\s*\[?entryPoints\.?\]?\s*:?\s*$(.*?)(?=^\S|\Z)', t)
+for name, port in re.findall(r'(?m)^\s*\[?(?:entryPoints\.)?([A-Za-z0-9_-]+)\]?\s*:?\s*\n\s*address\s*[:=]\s*["\']?[^"\'\n]*:(80|443)["\']?', t):
+    print(f"ep{port}={name}")
+m = re.search(r'(?ms)certificatesResolvers\]?\s*:?\s*\n\s*\[?(?:certificatesResolvers\.)?([A-Za-z0-9_-]+)', t)
+if m: print(f"resolver={m.group(1)}")
+PY
+    done
+  done
+}
+SCONF="$(static_conf | sort -u)"
 
 # Containers whose Traefik rule serves this domain (except ours), plus any named like the old app.
 label_rules() { docker inspect -f '{{range $k, $v := .Config.Labels}}{{$k}}={{$v}}{{"\n"}}{{end}}' "$1" 2>/dev/null | grep '^traefik\.http\.routers\.' || true; }
@@ -91,22 +129,44 @@ if [ -z "$RESOLVER" ]; then
 fi
 WEB_EP="$(printf '%s\n' $TARGS | grep -ioE 'entrypoints\.[a-z0-9_-]+\.address=:80$' | head -1 | cut -d. -f2 || true)"
 TLS_EP="$(printf '%s\n' $TARGS | grep -ioE 'entrypoints\.[a-z0-9_-]+\.address=:443$' | head -1 | cut -d. -f2 || true)"
+[ -z "$WEB_EP" ] && WEB_EP="$(printf '%s\n' "$SCONF" | grep '^ep80=' | head -1 | cut -d= -f2 || true)"
+[ -z "$TLS_EP" ] && TLS_EP="$(printf '%s\n' "$SCONF" | grep '^ep443=' | head -1 | cut -d= -f2 || true)"
+[ -z "$RESOLVER" ] && RESOLVER="$(printf '%s\n' "$SCONF" | grep '^resolver=' | head -1 | cut -d= -f2 || true)"
 # Never put the HTTPS router on the port-80 entrypoint.
 if [ -n "$EP" ] && [ "$EP" = "$WEB_EP" ] && [ -n "$TLS_EP" ]; then EP="$TLS_EP"; fi
 EP="${EP:-${TLS_EP:-websecure}}"; RESOLVER="${RESOLVER:-letsencrypt}"
 
 # Network shared with Traefik (prefer the one the old app used, then Traefik's own).
+TMODE="$(docker inspect -f '{{.HostConfig.NetworkMode}}' "$TRAEFIK" 2>/dev/null || true)"
+TNETS="$(docker inspect -f '{{range $k, $v := .NetworkSettings.Networks}}{{$k}} {{end}}' "$TRAEFIK" 2>/dev/null || true)"
 NET="$(printf '%s\n' $TARGS | grep -oE 'providers\.docker\.network=[^ ]+' | head -1 | cut -d= -f2 || true)"
+if [ -n "$NET" ] && ! docker network inspect "$NET" >/dev/null 2>&1; then NET=""; fi
 if [ -z "$NET" ] && [ -n "$SRC" ]; then
   for n in $(docker inspect -f '{{range $k, $v := .NetworkSettings.Networks}}{{$k}} {{end}}' "$SRC"); do
-    if docker inspect -f '{{range $k, $v := .NetworkSettings.Networks}}{{$k}} {{end}}' "$TRAEFIK" | grep -qw "$n"; then NET="$n"; break; fi
+    if printf ' %s ' "$TNETS" | grep -q " $n "; then NET="$n"; break; fi
   done
 fi
 if [ -z "$NET" ]; then
-  NET="$(docker inspect -f '{{range $k, $v := .NetworkSettings.Networks}}{{$k}} {{end}}' "$TRAEFIK" | tr ' ' '\n' | grep -vE '^(host|none|)$' | head -1 || true)"
+  NET="$(printf '%s\n' $TNETS | grep -vE '^(host|none|bridge)$' | head -1 || true)"
 fi
-[ -n "$NET" ] || die "Could not find a Docker network shared with Traefik."
+if [ -z "$NET" ]; then
+  # Traefik uses the host's network (or only the default bridge): give the app its own network.
+  # With host networking Traefik reaches it directly; otherwise Traefik is also connected to it.
+  NET="healthpilot_web"; OWN_NET=1
+  c_ok "Traefik network mode: ${TMODE:-?}; the app gets its own network ($NET)"
+fi
 c_ok "Router: ${RULE} · entrypoint ${EP} · certificates ${RESOLVER} · network ${NET}"
+if [ -n "$INSPECT" ]; then
+  diag
+  echo "Would replace: ${OLD[*]:-nothing}"; echo "(--inspect: nothing was changed)"; exit 0
+fi
+
+if [ -n "${OWN_NET:-}" ]; then
+  docker network inspect "$NET" >/dev/null 2>&1 || docker network create "$NET" >/dev/null
+  if [ "$TMODE" != "host" ] && ! printf ' %s ' "$TNETS" | grep -q " $NET "; then
+    docker network connect "$NET" "$TRAEFIK" || { diag; die "Could not connect Traefik to the network $NET."; }
+  fi
+fi
 
 # ── 2. Retire the old app ───────────────────────────────────────────────────
 STAMP="$(date +%Y%m%d-%H%M%S)"
