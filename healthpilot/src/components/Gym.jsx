@@ -5,12 +5,15 @@ import {
   buildSession, isRecord, lastPerformance, LEVELS, nextPlanDay, personalRecords, PLANS, planDays, sessionStats, SET_TYPES, suggestNext,
 } from '../lib/workout.js';
 import { dateKey, shortDay } from '../lib/dates.js';
+import { FORM_CHECK_IDS } from '../data/formcheckIds.js';
 import ExerciseFigure, { FigureSvg, MUSCLE_COLOR } from './ExerciseFigure.jsx';
 import BodyMap from './BodyMap.jsx';
 import { Card, Segmented, Sheet, fmt } from './ui.jsx';
 
 // The 3-D trainer pulls in WebGL code, so it loads only when an exercise is opened.
 const Exercise3D = lazy(() => import('./Exercise3D.jsx'));
+// The camera form check carries the pose model, so it loads only when its button is tapped.
+const FormCheck = lazy(() => import('./FormCheck.jsx'));
 
 const WEEK = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
 const mmss = (s) => `${Math.floor(s / 60)}:${String(Math.max(0, Math.floor(s % 60))).padStart(2, '0')}`;
@@ -42,13 +45,28 @@ export function ExerciseSheet({ id, onClose, onOpen }) {
   const ex = id && EXERCISE_BY_ID[id];
   const pr = ex ? personalRecords(state.workouts)[ex.id] : null;
   const last = ex ? lastPerformance(state.workouts, ex.id, '9999-12-31') : null;
+  const [checking, setChecking] = useState(false);
+  useEffect(() => setChecking(false), [id]);
   return (
     <Sheet open={!!ex} onClose={onClose} title={ex?.name || ''} wide>
       {ex && (
         <div className="stack">
-          <Suspense fallback={<ExerciseFigure ex={ex} />}>
-            <Exercise3D key={ex.id} ex={ex} />
-          </Suspense>
+          {/* Pause the 3-D trainer while the camera runs: phones cannot drive both smoothly. */}
+          {checking ? <ExerciseFigure ex={ex} /> : (
+            <Suspense fallback={<ExerciseFigure ex={ex} />}>
+              <Exercise3D key={ex.id} ex={ex} />
+            </Suspense>
+          )}
+          {FORM_CHECK_IDS.includes(ex.id) && (
+            <>
+              <button type="button" className="btn primary block" onClick={() => setChecking(true)}>📷 Form check — count reps and spot mistakes</button>
+              {checking && (
+                <Suspense fallback={<div className="fc-loading muted small center">Opening the camera coach…</div>}>
+                  <FormCheck ex={ex} onClose={() => setChecking(false)} />
+                </Suspense>
+              )}
+            </>
+          )}
           <div className="feel">
             <b>🎯 Where you should feel it</b>
             <p>{ex.feel}</p>

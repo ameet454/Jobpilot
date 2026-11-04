@@ -82,12 +82,20 @@ function frontMuscles(id, j) {
 
 /* ── Props (barbell, bench, cable…) ──────────────────────────────────── */
 function propPoint(j, name, front) {
-  if (front) return { hand: j.handR, handL: j.handL, neck: j.neck, hip: j.hip }[name];
-  return { hand: j.hand, neck: j.neck, hip: j.hip, ankle: j.ankle, toe: j.toe }[name];
+  if (front) return { hand: j.handR, handL: j.handL, neck: j.neck, hip: j.hip, knee: j.kneeR }[name];
+  if (name === 'back') { // on the upper back, behind the neck whatever the lean
+    const dx = j.neck[0] - j.waist[0]; const dy = j.neck[1] - j.waist[1]; const l = Math.hypot(dx, dy) || 1;
+    return [j.neck[0] - (-dy / l) * 8 + (dx / l), j.neck[1] - (dx / l) * 8 + (dy / l)];
+  }
+  return { hand: j.hand, neck: j.neck, hip: j.hip, knee: j.knee, ankle: j.ankle, toe: j.toe }[name];
 }
 
 function Prop({ p, j, front }) {
   if (p.t === 'line') return <polyline points={p.pts.map((q) => q.join(',')).join(' ')} strokeWidth={p.w} className="fig-prop" strokeLinecap="round" fill="none" />;
+  if (p.t === 'seat') {
+    const hx = (front ? j.hip[0] : j.hip[0] + (p.dx || 0)); const hw = front ? 20 : (p.depth || 34) / 2;
+    return <rect x={hx - hw} y={j.hip[1] + 8} width={hw * 2} height={Math.max(2, 241 - j.hip[1] - 8)} rx={3} className="fig-prop-fill" />;
+  }
   const pt = propPoint(j, p.at, front) || (p.to && propPoint(j, p.to, front));
   if (!pt) return null;
   const x = pt[0] + (p.dx || 0); const y = pt[1] + (p.dy || 0);

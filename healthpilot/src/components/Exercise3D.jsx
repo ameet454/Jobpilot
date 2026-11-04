@@ -49,9 +49,9 @@ export function buildProps(group, ex, mat, ox) {
       for (let i = 0; i < pts.length - 1; i += 1) {
         const a = pts[i]; const b = pts[i + 1];
         const len = v.len(v.sub(b, a));
-        const zs = p.kind === 'dipbars' ? [-22, 22] : [0];
+        const zs = p.kind === 'dipbars' ? [-22, 22] : [p.z || 0]; // z: shift sideways (bench beside the standing leg)
         for (const z of zs) {
-          const depth = p.kind === 'dipbars' || p.w <= 6 ? 5 : 30;
+          const depth = p.d || (p.kind === 'dipbars' || p.w <= 6 ? 5 : 30);
           const box = new THREE.Mesh(new THREE.BoxGeometry(len, p.w, depth), p.w <= 6 ? mat.iron : mat.pad);
           box.position.set((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, z);
           box.rotation.z = Math.atan2(b[1] - a[1], b[0] - a[0]);
@@ -72,18 +72,20 @@ export function buildProps(group, ex, mat, ox) {
       }
       group.add(g);
       updates.push((R) => {
-        const base = p.at === 'neck' ? R.J.neck : p.at === 'hip' ? R.J.hip : v.lerp(R.J.hand1, R.J['hand-1'], 0.5);
+        let base = p.at === 'neck' ? R.J.neck : p.at === 'hip' ? R.J.hip : v.lerp(R.J.hand1, R.J['hand-1'], 0.5);
+        if (p.at === 'back') { const c = R.bones.find((x) => x.key === 'chest'); base = v.add(v.add(R.J.neck, v.mul(c.f, -8)), v.mul(c.u, 1)); } // on the upper traps, whatever the lean
         g.position.set(base[0] + (p.dx || 0), base[1] - (p.dy || 0), 0);
       });
     } else if (p.t === 'dumbbell') {
-      const sides = ex.view === 'front' ? [p.at === 'handL' ? -1 : 1] : [1, -1];
+      // `one`: only the near hand holds it (one-arm row); `mid`: one dumbbell held in both hands (goblet squat).
+      const sides = ex.view === 'front' ? [p.at === 'handL' ? -1 : 1] : p.one ? [1] : p.mid ? [0] : [1, -1];
       for (const s of sides) {
         const g = new THREE.Group();
         const h = new THREE.Mesh(UNIT_CYL(1.2, 1.2), mat.steel); h.rotation.x = Math.PI / 2; h.scale.y = 16; g.add(h);
         for (const z of [-7, 7]) { const pl = new THREE.Mesh(new THREE.CylinderGeometry(5.5, 5.5, 4, 20), mat.iron); pl.rotation.x = Math.PI / 2; pl.position.z = z; g.add(pl); }
         if (ex.view === 'front') g.rotation.y = Math.PI / 2;
         group.add(g);
-        updates.push((R) => g.position.set(...R.J[`hand${s}`]));
+        updates.push((R) => g.position.set(...(s ? R.J[`hand${s}`] : v.lerp(R.J.hand1, R.J['hand-1'], 0.5))));
       }
     } else if (p.t === 'grip') {
       const g = new THREE.Mesh(UNIT_CYL(1.4, 1.4), mat.iron); g.rotation.x = Math.PI / 2; group.add(g);
@@ -94,12 +96,25 @@ export function buildProps(group, ex, mat, ox) {
       const geo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(...from), new THREE.Vector3()]);
       const line = new THREE.Line(geo, new THREE.LineBasicMaterial({ color: '#7b8794' })); group.add(line);
       updates.push((R) => {
-        const to = ex.view === 'front' ? R.J[p.to === 'handL' ? 'hand-1' : 'hand1'] : v.lerp(R.J.hand1, R.J['hand-1'], 0.5);
+        const to = ex.view === 'front' ? R.J[p.to === 'handL' ? 'hand-1' : 'hand1'] : p.one ? R.J.hand1 : v.lerp(R.J.hand1, R.J['hand-1'], 0.5);
         geo.attributes.position.setXYZ(1, ...to); geo.attributes.position.needsUpdate = true;
       });
     } else if (p.t === 'pad') {
       const pad = new THREE.Mesh(UNIT_CYL(6, 6), mat.pad); pad.rotation.x = Math.PI / 2; pad.scale.y = 30; group.add(pad);
-      updates.push((R) => { const c = v.lerp(R.J.ankle1, R.J['ankle-1'], 0.5); pad.position.set(c[0], c[1], 0); });
+      updates.push((R) => {
+        const c = p.at === 'knee' ? v.lerp(R.J.knee1, R.J['knee-1'], 0.5) : v.lerp(R.J.ankle1, R.J['ankle-1'], 0.5);
+        pad.position.set(c[0], c[1] - (p.dy || 0), 0);
+      });
+    } else if (p.t === 'seat') {
+      // A box from the floor up to just under the hips, plus an optional back rest.
+      const seat = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), mat.pad); seat.castShadow = true; seat.receiveShadow = true; group.add(seat);
+      const back = p.back && new THREE.Mesh(new THREE.BoxGeometry(6, 1, 30), mat.pad);
+      if (back) group.add(back);
+      updates.push((R) => {
+        const h = Math.max(4, R.J.hip[1] - 8);
+        seat.scale.set(p.depth || 34, h, 34); seat.position.set(R.J.hip[0] + (p.dx || 0), h / 2, 0);
+        if (back) { const top = R.J.neck[1] - 4; back.scale.y = top - h; back.position.set(R.J.hip[0] - 13, (top + h) / 2, 0); }
+      });
     } else if (p.t === 'sled') {
       const sled = new THREE.Mesh(new THREE.BoxGeometry(3, 36, 34), mat.iron); group.add(sled);
       updates.push((R) => { const c = v.lerp(R.J.toe1, R.J['toe-1'], 0.5); sled.position.set(c[0] + 2, c[1], 0); sled.rotation.z = -((p.angle - 90) * Math.PI) / 180; });
@@ -111,7 +126,7 @@ export function buildProps(group, ex, mat, ox) {
 /** Where the load is: the point we draw the movement arrow from. */
 function loadPoint(ex, R) {
   const pr = ex.props.find((p) => ['barbell', 'dumbbell', 'grip'].includes(p.t));
-  if (pr?.at === 'neck') return R.J.neck;
+  if (pr?.at === 'neck' || pr?.at === 'back') return R.J.neck;
   if (pr?.at === 'hip') return R.J.hip;
   if (ex.view === 'front') return R.J.hand1;
   if (['back-squat', 'leg-press', 'leg-extension', 'leg-curl', 'calf-raise', 'walking-lunge'].includes(ex.id)) return v.lerp(R.J.hip, R.J.ankle1, ex.id === 'leg-extension' || ex.id === 'leg-curl' ? 1 : 0.15);
@@ -128,6 +143,7 @@ export function framing(ex) {
 }
 
 export function defaultView(ex) {
+  if (ex.cam) return ex.cam; // per-exercise override when the rule below hides the movement
   const lying = Math.abs(Math.sin((ex.A.torso * Math.PI) / 180)) < 0.6;
   const f0 = ex.focus[0];
   const back = BACK_MUSCLES.has(f0.split('.')[0]) || f0 === 'shoulders.rear';

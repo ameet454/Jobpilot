@@ -1,0 +1,28 @@
+/* Form check: full-screen camera coach (loaded with its lazy chunk). */
+.fc { position: fixed; inset: 0; z-index: 60; background: #000; color: #fff; display: flex; flex-direction: column; }
+.fc-stage { position: relative; flex: 1; overflow: hidden; }
+.fc-stage.hidden { display: none; }
+.fc-stage video, .fc-stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
+.fc-stage .mirror { transform: scaleX(-1); }
+.fc-top { position: absolute; top: calc(12px + env(safe-area-inset-top)); left: 12px; right: 12px; display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+.fc-count, .fc-angle { background: rgba(0, 0, 0, 0.55); border-radius: 14px; padding: 8px 12px; }
+.fc-count b { font-size: 2.4rem; line-height: 1; display: block; }
+.fc-count span { font-size: 0.8rem; opacity: 0.85; }
+.fc-angle { font-weight: 600; font-variant-numeric: tabular-nums; }
+.fc-msg { position: absolute; left: 50%; top: 45%; transform: translate(-50%, -50%); width: min(86%, 360px); text-align: center; background: rgba(0, 0, 0, 0.6); border-radius: 14px; padding: 12px 14px; }
+.fc-fault, .fc-rep { position: absolute; left: 12px; right: 12px; bottom: calc(70px + env(safe-area-inset-bottom)); border-radius: 14px; padding: 10px 14px; }
+.fc-fault { background: rgba(214, 48, 49, 0.92); display: flex; flex-direction: column; gap: 2px; }
+.fc-fault b { font-size: 1.1rem; }
+.fc-rep { background: rgba(0, 0, 0, 0.6); font-size: 0.95rem; }
+.fc-rep.good { border-left: 4px solid #28dca0; }
+.fc-rep.warn { border-left: 4px solid #ffb020; }
+.fc-bar { position: absolute; left: 0; right: 0; bottom: 0; display: flex; justify-content: center; gap: 8px; padding: 12px 12px calc(12px + env(safe-area-inset-bottom)); background: linear-gradient(transparent, rgba(0, 0, 0, 0.6)); }
+.fc-panel { margin: auto; width: min(100% - 32px, 480px); max-height: 100%; overflow-y: auto; background: var(--bg); color: var(--text); border-radius: 20px; padding: 18px 16px; display: flex; flex-direction: column; gap: 10px; }
+.fc-panel h2 { margin: 0; font-size: 1.2rem; }
+.fc-panel p, .fc-panel ul { margin: 0; }
+.fc-setup { background: var(--accent-soft); border-radius: 12px; padding: 10px 12px; }
+.fc-error { color: var(--bad); font-weight: 600; }
+.fc-reps { margin: 0; padding-left: 22px; display: flex; flex-direction: column; gap: 4px; }
+.fc-reps .good::marker { color: var(--good); }
+.fc-reps .warn { color: var(--warn); }
+.fc-trigger { margin-top: 8px; }

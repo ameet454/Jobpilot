@@ -11,6 +11,10 @@
  *   ua2/fa2/th2/sh2/foot2    optional far-side limbs (default: same as near side)
  *
  * anchor: 'hip' (default) | 'ankle' (feet planted) | 'hand' (hanging / pushing)
+ *
+ * 3-D only (see lib/rig3d.js): shrug (extra collarbone lift, degrees), wide
+ * (stance width, 1 = hip width), grip (hand half-width). Front view only: seated (thighs point at the
+ * viewer), arc (elbows and hands swing forward so arm bones keep their length).
  */
 // Proportions measured from the BodyParts3D skeleton, scaled to a torso of 66.
 export const LEN = { torso: 66, upperArm: 37, forearm: 31, thigh: 53, shin: 45, foot: 17, head: 24 };
@@ -76,7 +80,10 @@ export function frontJoints(p) {
   const armR = solvePose({ ...p, anchor: 'hip', at: shR, torso: 0 });
   const elbow = [shR[0] + (armR.elbow[0] - armR.neck[0]), shR[1] + (armR.elbow[1] - armR.neck[1])];
   const hand = [elbow[0] + (armR.hand[0] - armR.elbow[0]), elbow[1] + (armR.hand[1] - armR.elbow[1])];
-  const legR = solvePose({ ...p, anchor: 'hip', at: hipR });
+  // Seated: the thighs point at the viewer, so the knees sit just below the hips.
+  const legR = p.seated
+    ? { knee: [hipR[0] + 2, hipR[1] + 4], ankle: [hipR[0] + 3, hipR[1] + 4 + LEN.shin], toe: [hipR[0] + 3, hipR[1] + 8 + LEN.shin] }
+    : solvePose({ ...p, anchor: 'hip', at: hipR });
   return {
     cx, neck: j.neck, hip: j.hip, head: [j.neck[0], j.neck[1] - 21],
     shR, elbowR: elbow, handR: hand, hipR, kneeR: legR.knee, ankleR: legR.ankle, toeR: legR.toe,
@@ -86,15 +93,16 @@ export function frontJoints(p) {
 }
 
 const lerp = (a, b, t) => a + (b - a) * t;
-const ANGLES = ['torso', 'spine', 'head', 'ua', 'fa', 'th', 'sh', 'foot', 'ua2', 'fa2', 'th2', 'sh2', 'foot2', 'uaLen', 'reach'];
+const ANGLES = ['torso', 'spine', 'head', 'ua', 'fa', 'th', 'sh', 'foot', 'ua2', 'fa2', 'th2', 'sh2', 'foot2', 'uaLen', 'reach', 'shrug', 'wide', 'grip'];
 
 /** Blend two key poses (t = 0 → a, t = 1 → b). */
 export function blendPose(a, b, t) {
   const out = { ...a, at: [lerp(a.at[0], b.at[0], t), lerp(a.at[1], b.at[1], t)] };
   for (const k of ANGLES) {
     if (a[k] == null && b[k] == null) continue;
+    if (k === 'grip' && (a[k] == null || b[k] == null)) continue; // no neutral value to blend from
     const fallback = k.endsWith('2') ? k.slice(0, -1) : null;
-    const base = k === 'uaLen' ? 1 : 0;
+    const base = k === 'uaLen' || k === 'wide' ? 1 : 0;
     const va = a[k] ?? (fallback ? a[fallback] : base) ?? base;
     const vb = b[k] ?? (fallback ? b[fallback] : base) ?? base;
     out[k] = lerp(va, vb, t);

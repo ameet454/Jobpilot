@@ -7,7 +7,7 @@
  * x axis onto Z instead. The result is plain arrays so it can be unit-tested
  * without WebGL.
  */
-import { blendPose, frontJoints, solvePose, WAIST } from './pose.js';
+import { blendPose, frontJoints, LEN, solvePose, WAIST } from './pose.js';
 
 export const FLOOR_Y = 241;
 // Half-widths measured from the BodyParts3D skeleton (same scale as pose.js LEN).
@@ -27,6 +27,9 @@ export const v = {
   norm: (a) => { const l = Math.hypot(a[0], a[1], a[2]) || 1; return [a[0] / l, a[1] / l, a[2] / l]; },
   lerp: (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t],
 };
+
+const unit2 = (a, b) => { const dx = b[0] - a[0]; const dy = b[1] - a[1]; const l = Math.hypot(dx, dy) || 1; return [dx / l, dy / l]; };
+const dot2 = (a, b) => a[0] * b[0] + a[1] * b[1];
 
 /** Orthonormal frame for a bone: u along it, f its "front" (chest / quad side), l = u × f. */
 function frame(a, b, fHint) {
@@ -55,6 +58,8 @@ const SC_OFFSET = [6.7, 0.8, 1.5];
 // Scapulohumeral rhythm, simplified: past 30° of arm elevation the collarbone and
 // shoulder blade turn upward by ~0.18° per degree, up to 22°.
 const girdleAngle = (armElevation) => Math.max(0, Math.min(22, (armElevation - 30) * 0.18));
+// How far a bone of length `len` must point toward the viewer when its 2-D projection runs a → b.
+const depth = (a, b, len) => Math.sqrt(Math.max(0, len * len - (a[0] - b[0]) ** 2 - (a[1] - b[1]) ** 2));
 
 /** Rotate vector p about unit axis k by `deg` degrees (Rodrigues). */
 function rotateAbout(p, k, deg) {
@@ -79,15 +84,20 @@ export function rig(ex, t, ox = 150) {
     const F = (pt, x = 0) => [x, FLOOR_Y - pt[1], pt[0] - j.cx];
     J.hip = F(j.hip); J.neck = F(j.neck); J.head = F(j.head);
     J.waist = v.lerp(J.hip, J.neck, WAIST);
+    const knee = p.seated ? LEN.thigh : 0;
     for (const [s, k] of [[1, 'R'], [-1, 'L']]) {
+      // `arc`: whatever length the 2-D drawing loses is depth toward the viewer (pec deck, Arnold press).
+      const ez = p.arc ? depth(j[`sh${k}`], j[`elbow${k}`], LEN.upperArm) : 0;
+      const hz = p.arc ? ez + depth(j[`elbow${k}`], j[`hand${k}`], LEN.forearm) : 0;
       J[`shoulder${s}`] = F(j[`sh${k}`]);
-      J[`elbow${s}`] = F(j[`elbow${k}`], reach * 0.6);
-      J[`hand${s}`] = F(j[`hand${k}`], reach);
+      J[`elbow${s}`] = F(j[`elbow${k}`], reach * 0.6 + ez);
+      J[`hand${s}`] = F(j[`hand${k}`], reach + hz);
       J[`hip${s}`] = F(j[`hip${k}`]);
-      J[`knee${s}`] = F(j[`knee${k}`]);
-      J[`ankle${s}`] = F(j[`ankle${k}`]);
-      J[`toe${s}`] = v.add(F(j[`ankle${k}`]), [13, -3, 0]);
+      J[`knee${s}`] = F(j[`knee${k}`], knee);
+      J[`ankle${s}`] = F(j[`ankle${k}`], knee);
+      J[`toe${s}`] = v.add(F(j[`ankle${k}`], knee), [13, -3, 0]);
       for (const b of ['ua', 'fa', 'th', 'sh']) hint[`${b}${s}`] = [1, 0, 0];
+      if (p.seated) hint[`th${s}`] = [0, 1, 0];
     }
     lowerF = [1, 0, 0]; upperF = [1, 0, 0];
   } else {
@@ -96,14 +106,20 @@ export function rig(ex, t, ox = 150) {
     lowerF = front2d('torso', j.hip, j.waist, ex.prone);
     upperF = front2d('torso', j.waist, j.neck, ex.prone);
     // +1 = the athlete's right side (nearest the default camera), -1 = left.
+    const wide = p.wide ?? 1; // sumo / goblet stance: knees and feet further apart
     for (const [s, src] of [[1, j], [-1, j.far]]) {
+      // Arms hang slightly out from the ribs (the elbow's carrying angle), and the
+      // knees track out over the toes as the hip bends — both keep limbs off the trunk.
+      const hipFlex = (Math.acos(Math.max(-1, Math.min(1, dot2(unit2(j.hip, src.knee), unit2(j.waist, j.hip))))) * 180) / Math.PI;
+      const kneesOut = Math.max(0, Math.min(1, (hipFlex - 40) / 60)) * 9;
       J[`shoulder${s}`] = W(j.neck, s * Z_SHOULDER);
-      J[`elbow${s}`] = W(src.elbow, s * Z_SHOULDER);
-      J[`hand${s}`] = W(src.hand, s * (Z_SHOULDER + 1));
+      // `grip` overrides the hand half-width (sumo deadlift: hands inside the knees).
+      J[`elbow${s}`] = W(src.elbow, s * (p.grip ? (Z_SHOULDER + p.grip) / 2 : Z_SHOULDER + 4));
+      J[`hand${s}`] = W(src.hand, s * (p.grip ?? Z_SHOULDER + 7));
       J[`hip${s}`] = W(j.hip, s * Z_HIP);
-      J[`knee${s}`] = W(src.knee, s * Z_KNEE);
-      J[`ankle${s}`] = W(src.ankle, s * Z_ANKLE);
-      J[`toe${s}`] = W(src.toe, s * Z_ANKLE);
+      J[`knee${s}`] = W(src.knee, s * (Z_KNEE * wide + kneesOut));
+      J[`ankle${s}`] = W(src.ankle, s * Z_ANKLE * wide * (wide > 1 ? 1.15 : 1));
+      J[`toe${s}`] = W(src.toe, s * Z_ANKLE * wide * (wide > 1 ? 1.3 : 1));
       hint[`ua${s}`] = front2d('ua', j.neck, src.elbow, ex.prone);
       hint[`fa${s}`] = front2d('fa', src.elbow, src.hand, ex.prone);
       hint[`th${s}`] = front2d('th', j.hip, src.knee, ex.prone);
@@ -119,7 +135,7 @@ export function rig(ex, t, ox = 150) {
     const sh0 = J[`shoulder${s}`];
     const arm = v.norm(v.sub(J[`elbow${s}`], sh0));
     const elevation = (Math.acos(Math.max(-1, Math.min(1, -v.dot(arm, chest.u)))) * 180) / Math.PI;
-    const sh1 = v.add(sc, rotateAbout(v.sub(sh0, sc), chest.f, -s * girdleAngle(elevation)));
+    const sh1 = v.add(sc, rotateAbout(v.sub(sh0, sc), chest.f, -s * (girdleAngle(elevation) + (p.shrug ?? 0))));
     J[`sc${s}`] = sc;
     delta[s] = v.sub(sh1, sh0);
   }
