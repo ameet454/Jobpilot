@@ -132,6 +132,8 @@ export function blendPose(a, b, t) {
 }
 
 export const ease = (t) => (t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2);
+// Lowering is controlled: a gentle start and stop around a near-even speed.
+const easeLower = (t) => 0.5 - 0.5 * Math.cos(Math.PI * t);
 
 /**
  * Where in the rep we are. A rep starts at pose A, moves to B, pauses, comes
@@ -146,11 +148,11 @@ export function repPhase(ms, tempo, lift = 'AB') {
   const holdA = lift === 'AB' ? rest : squeeze;
   const total = (first + holdB + second + holdA) * 1000;
   let s = (((ms % total) + total) % total) / 1000;
-  if (s < first) return { t: ease(s / first), stage: lift === 'AB' ? 'lift' : 'lower', progress: s / first };
+  if (s < first) return { t: (lift === 'AB' ? ease : easeLower)(s / first), stage: lift === 'AB' ? 'lift' : 'lower', progress: s / first };
   s -= first;
   if (s < holdB) return { t: 1, stage: lift === 'AB' ? 'squeeze' : 'stretch', progress: s / holdB };
   s -= holdB;
-  if (s < second) return { t: 1 - ease(s / second), stage: lift === 'AB' ? 'lower' : 'lift', progress: s / second };
+  if (s < second) return { t: 1 - (lift === 'AB' ? easeLower : ease)(s / second), stage: lift === 'AB' ? 'lower' : 'lift', progress: s / second };
   return { t: 0, stage: lift === 'AB' ? 'stretch' : 'squeeze', progress: (s - second) / holdA };
 }
 
@@ -163,3 +165,125 @@ export const STAGE_LABEL = {
   lower: 'Lower slowly — keep tension',
   stretch: 'Stretch — control, then go again',
 };
+
+/* ─────────────────────────── Natural motion ───────────────────────────
+ * Blending two key poses angle by angle moves every joint at the same pace, so a
+ * squat's bar drifts off the mid-foot, a press swings the bar out in an arc and a
+ * pull-up swings the body. Real lifters move the load in a near-straight line and
+ * their joints take turns. `motionPose` adds that on top of `blendPose`:
+ *
+ *   timing   some joints lead and some follow (deadlift: knees straighten first,
+ *            then the hips — and in reverse on the way down: hips back first)
+ *   balance  standing lifts with a bar or dumbbells: the trunk leans just enough to
+ *            keep the load travelling in a straight line (over the mid-foot)
+ *   reach    presses, rows and pulldowns (shoulder and elbow both moving): the hands
+ *            travel in a straight line; solved in 3-D by lib/rig3d.js so the elbows
+ *            can flare out to the side
+ *   hang     pull-ups and dips: the arms are solved so the body rises in a straight line
+ *
+ * Pose A (t = 0) and pose B (t = 1) are unchanged.
+ */
+const DEG = 180 / Math.PI;
+const angOf = (a, b) => Math.atan2(b[1] - a[1], b[0] - a[0]) * DEG;
+const relElbow = (p, s = '') => (p[`fa${s}`] ?? p.fa) - (p[`ua${s}`] ?? p.ua);
+/** Monotonic timing warp: k > 0 leads (moves early), k < 0 follows. |k| ≤ 1. */
+const lead = (t, k) => t + k * t * (1 - t);
+const smooth = (x) => x * x * (3 - 2 * x);
+
+/** Where the load sits in the 2-D pose: the bar on the upper back or the fist. */
+function load2d(ex, j, p) {
+  const bar = ex.props?.find((pr) => pr.t === 'barbell');
+  const upper = p.torso + (p.spine ?? 0);
+  if (bar?.at === 'back') {
+    const [ux, uy] = dir(upper);
+    return [j.neck[0] + 9 * uy + 3 * ux, j.neck[1] - 9 * ux + 3 * uy];
+  }
+  return move(j.hand, p.fa, 11.5);
+}
+
+/** Two-bone reach in 2-D (used for hanging moves): from `base` put the far end at `target`; returns the middle joint closest to `near`. */
+function reach2(base, target, l1, l2, near) {
+  const dx = target[0] - base[0]; const dy = target[1] - base[1];
+  const d = Math.min(l1 + l2 - 1e-3, Math.max(Math.abs(l1 - l2) + 1e-3, Math.hypot(dx, dy)));
+  const a0 = Math.atan2(dy, dx); const k = Math.acos((l1 * l1 + d * d - l2 * l2) / (2 * l1 * d));
+  const c1 = [base[0] + l1 * Math.cos(a0 + k), base[1] + l1 * Math.sin(a0 + k)];
+  const c2 = [base[0] + l1 * Math.cos(a0 - k), base[1] + l1 * Math.sin(a0 - k)];
+  const dd = (c) => (c[0] - near[0]) ** 2 + (c[1] - near[1]) ** 2;
+  return dd(c1) <= dd(c2) ? c1 : c2;
+}
+
+const PLAN = new WeakMap();
+/** How the exercise moves (worked out once per exercise). */
+export function motionPlan(ex) {
+  if (PLAN.has(ex)) return PLAN.get(ex);
+  const A = ex.A; const B = blendPose(ex.A, ex.B, 1);
+  const held = (ex.props || []).find((pr) => ['barbell', 'dumbbell', 'grip'].includes(pr.t) && pr.at !== 'hip');
+  const dTh = Math.abs((B.th ?? 0) - (A.th ?? 0));
+  const dUa = Math.abs(B.ua - A.ua);
+  const dEl = Math.abs(relElbow(B) - relElbow(A));
+  const multiArm = dUa > 25 && dEl > 25;
+  let mode = null;
+  if (ex.view !== 'front') {
+    if (A.anchor === 'hand' && multiArm) mode = 'hang';
+    else if (held && A.anchor === 'ankle' && dTh >= 45) mode = 'balance';
+    else if (held && held.t !== 'grip' && held.at !== 'back' && multiArm) mode = 'reach';
+    else if (held?.t === 'grip' && multiArm) mode = 'reach';
+  }
+  // Pulling a bar off the floor: knees straighten first, hips finish (reverses on the way down).
+  const floorPull = mode === 'balance' && ex.lift === 'AB' && (B.torso - A.torso) < -30;
+  // First pull: the shins come back to vertical by the time the bar reaches the knees.
+  const timing = floorPull ? { th: 0.25, th2: 0.25, sh: ['ramp', 0.4], sh2: ['ramp', 0.4] } : {};
+  const plan = { mode, timing };
+  if (mode) {
+    const p0 = blendTimed(ex, 0, timing); const p1 = blendTimed(ex, 1, timing);
+    const j0 = solvePose(p0); const j1 = solvePose(p1);
+    if (mode === 'balance') { plan.a = load2d(ex, j0, p0); plan.b = load2d(ex, j1, p1); }
+    if (mode === 'hang') { plan.a = j0.neck; plan.b = j1.neck; }
+  }
+  PLAN.set(ex, plan);
+  return plan;
+}
+
+function blendTimed(ex, t, timing) {
+  const p = blendPose(ex.A, ex.B, t);
+  for (const [k, kk] of Object.entries(timing)) {
+    const a = ex.A[k] ?? ex.A[k.replace(/2$/, '')]; const b = ex.B[k] ?? ex.B[k.replace(/2$/, '')];
+    if (a == null || b == null) continue;
+    const w = Array.isArray(kk) ? smooth(Math.min(1, t / kk[1])) : lead(t, kk);
+    p[k] = a + (b - a) * w;
+  }
+  return p;
+}
+
+/** Signed distance of point q from the line a → b. */
+const offLine = (q, a, b) => { const dx = b[0] - a[0]; const dy = b[1] - a[1]; const l = Math.hypot(dx, dy) || 1; return ((q[0] - a[0]) * dy - (q[1] - a[1]) * dx) / l; };
+/** Point on the line a → b at progress u. */
+const onLine = (a, b, u) => [a[0] + (b[0] - a[0]) * u, a[1] + (b[1] - a[1]) * u];
+
+/** The pose at blend t with natural timing and a straight load path. */
+export function motionPose(ex, t) {
+  const plan = motionPlan(ex);
+  const p = blendTimed(ex, t, plan.timing);
+  if (!plan.mode || t <= 0 || t >= 1) return p;
+  if (plan.mode === 'balance') {
+    // Lean the trunk until the load is back on its line (secant search, a few steps).
+    const f = (d) => { const q = { ...p, torso: p.torso + d }; return offLine(load2d(ex, solvePose(q), q), plan.a, plan.b); };
+    let d0 = 0; let f0 = f(d0); let d1 = 2; let f1 = f(d1);
+    for (let i = 0; i < 8 && Math.abs(f1) > 0.02; i += 1) {
+      if (Math.abs(f1 - f0) < 1e-9) break;
+      const d2 = Math.max(-25, Math.min(25, d1 - (f1 * (d1 - d0)) / (f1 - f0)));
+      d0 = d1; f0 = f1; d1 = d2; f1 = f(d1);
+    }
+    p.torso += d1;
+    return p;
+  }
+  if (plan.mode !== 'hang') return p; // 'reach' is solved in 3-D (lib/rig3d.js)
+  const j = solvePose(p);
+  // hang: hands fixed on the bar, the neck rides a straight line.
+  const target = onLine(plan.a, plan.b, t);
+  const e = reach2(p.at, target, LEN.forearm, LEN.upperArm * (p.uaLen ?? 1), j.elbow);
+  const fa = angOf(e, p.at); const ua = angOf(target, e);
+  const wrap = (x, ref) => { let y = x; while (y - ref > 180) y -= 360; while (y - ref < -180) y += 360; return y; };
+  p.fa = wrap(fa, p.fa); p.ua = wrap(ua, p.ua);
+  return p;
+}

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { blendPose, frontJoints, repPhase, solvePose, STAGE_LABEL, STAGE_LOAD } from '../lib/pose.js';
+import { frontJoints, motionPose, repPhase, solvePose, STAGE_LABEL, STAGE_LOAD } from '../lib/pose.js';
 
 export const MUSCLE_COLOR = { primary: '#ef4444', secondary: '#f59e0b' };
 
@@ -119,7 +119,7 @@ function figureBox(ex) {
   if (boundsCache.has(ex)) return boundsCache.get(ex);
   const pts = [];
   for (const t of [0, 0.25, 0.5, 0.75, 1]) {
-    const p = blendPose(ex.A, ex.B, t);
+    const p = motionPose(ex, t);
     if (ex.view === 'front') pts.push(...Object.values(frontJoints(p)).filter(Array.isArray));
     else { const j = solvePose(p); pts.push(j.hip, j.neck, j.head, j.elbow, j.hand, j.knee, j.ankle, j.toe, ...Object.values(j.far)); }
   }
@@ -141,7 +141,7 @@ function figureBox(ex) {
 
 /* ── The animated figure ─────────────────────────────────────────────── */
 export function FigureSvg({ ex, t, load = 1, pulse = 0, compact = false }) {
-  const pose = blendPose(ex.A, ex.B, t);
+  const pose = motionPose(ex, t);
   const front = ex.view === 'front';
   const roles = [...ex.secondary.map((m) => [m, 'secondary']), ...ex.primary.map((m) => [m, 'primary'])];
   const glow = (role) => (role === 'primary' ? 0.45 + 0.55 * load * (0.85 + 0.15 * pulse) : 0.35 + 0.35 * load);

@@ -289,8 +289,10 @@ export const EXERCISES = [
     breathe: 'Big breath and brace before each rep, breathe out at the top.',
     alts: ['sumo-deadlift', 'romanian-deadlift', 'hip-thrust'],
     props: [{ t: 'barbell', at: 'hand', r: 21 }],
-    A: { ...STAND, torso: -40, th: 20, sh: 115, ua: 100, fa: 95 },
-    B: { ...STAND, torso: -92, th: 90, sh: 90, ua: 95, fa: 90 },
+    // Set-up: shins nearly vertical with the bar just in front of them over mid-foot,
+    // shoulders a touch ahead of the bar, arms straight. Lockout: bar resting on the thighs.
+    A: { ...STAND, torso: -34, th: 24, sh: 102, ua: 92, fa: 92 },
+    B: { ...STAND, torso: -92, th: 90, sh: 90, ua: 81, fa: 81 },
   },
   {
     id: 't-bar-row', name: 'T-bar Row', equipment: 'T-bar / landmine + plates', level: 'Intermediate',
