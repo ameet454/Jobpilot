@@ -24,16 +24,16 @@ export function makeMaterials(dark) {
 
 let envCache = null;
 /** Soft studio light: an environment map plus one shadow-casting key light. */
-export function addStudio(renderer, scene, { shadows = true, dark = false } = {}) {
+export function addStudio(renderer, scene, { shadows = true, dark = false, cinema = false } = {}) {
   if (!envCache || envCache.renderer !== renderer) {
     const pmrem = new THREE.PMREMGenerator(renderer);
     envCache = { renderer, tex: pmrem.fromScene(new RoomEnvironment(), 0.04).texture };
     pmrem.dispose();
   }
   scene.environment = envCache.tex;
-  scene.environmentIntensity = dark ? 0.55 : 0.7;
-  const key = new THREE.DirectionalLight('#fff4ea', dark ? 1.6 : 1.9);
-  key.position.set(120, 320, 180);
+  scene.environmentIntensity = cinema ? 0.32 : dark ? 0.55 : 0.7;
+  const key = new THREE.DirectionalLight('#fff1e2', cinema ? 2.3 : dark ? 1.6 : 1.9);
+  key.position.set(140, 300, 200);
   if (shadows) {
     key.castShadow = true;
     key.shadow.mapSize.set(1024, 1024);
@@ -43,10 +43,66 @@ export function addStudio(renderer, scene, { shadows = true, dark = false } = {}
     key.shadow.camera.updateProjectionMatrix();
   }
   scene.add(key);
-  const rim = new THREE.DirectionalLight('#cfe0ff', dark ? 1.1 : 0.8);
-  rim.position.set(-220, 160, -160);
+  const rim = new THREE.DirectionalLight(cinema ? '#8fc2ff' : '#cfe0ff', cinema ? 2.6 : dark ? 1.1 : 0.8);
+  rim.position.set(-220, 180, -170);
   scene.add(rim);
+  if (cinema) {
+    // Studio look: a warm kicker from the other side and a soft fill, so the body is sculpted by light.
+    const kick = new THREE.DirectionalLight('#ffc89e', 1.5); kick.position.set(200, 120, -220); scene.add(kick);
+    scene.add(new THREE.HemisphereLight('#3a4658', '#0d0f13', 0.6));
+  }
   return { key, rim };
+}
+
+/** Dark studio backdrop: a soft radial pool of light behind the athlete. */
+export function studioBackdrop() {
+  const c = document.createElement('canvas'); c.width = 512; c.height = 512;
+  const g = c.getContext('2d');
+  const grad = g.createRadialGradient(256, 200, 10, 256, 230, 380);
+  grad.addColorStop(0, '#343b48'); grad.addColorStop(0.45, '#1a1e26'); grad.addColorStop(1, '#090b0e');
+  g.fillStyle = grad; g.fillRect(0, 0, 512, 512);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
+/** A soft pool of light on the floor under the athlete. */
+export function floorGlow(scene, radius = 120) {
+  const c = document.createElement('canvas'); c.width = 256; c.height = 256;
+  const g = c.getContext('2d');
+  const grad = g.createRadialGradient(128, 128, 0, 128, 128, 128);
+  grad.addColorStop(0, 'rgba(150,175,210,0.35)'); grad.addColorStop(0.6, 'rgba(90,110,140,0.12)'); grad.addColorStop(1, 'rgba(0,0,0,0)');
+  g.fillStyle = grad; g.fillRect(0, 0, 256, 256);
+  const tex = new THREE.CanvasTexture(c);
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(radius * 2, radius * 2), new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+  m.rotation.x = -Math.PI / 2; m.position.y = 0.05; m.renderOrder = -1;
+  scene.add(m);
+  return m;
+}
+
+/**
+ * Camera distance and stage shape that make the athlete fill the frame: the rep's
+ * joints (plus head top and feet) projected onto the view, fitted with a margin.
+ */
+export function fitView(ex, ox, az, el, fovDeg = 30, aspect = 0.8) {
+  const pts = [];
+  for (const t of [0, 0.25, 0.5, 0.75, 1]) {
+    const R = rig(ex, t, ox);
+    // Joints, the head top, the floor under the hips, and the ends of whatever is held.
+    pts.push(...Object.values(R.J), v.add(R.J.head, [0, 24, 0]), [R.J.hip[0], 0, R.J.hip[2]],
+      v.add(R.J.grip1, [0, 0, 14]), v.add(R.J['grip-1'], [0, 0, -14]), v.add(R.J.grip1, [0, 8, 0]), v.add(R.J['grip-1'], [0, 8, 0]));
+  }
+  const a = (az * Math.PI) / 180; const e = (el * Math.PI) / 180;
+  const fwd = [-Math.cos(e) * Math.cos(a), -Math.sin(e), -Math.cos(e) * Math.sin(a)];
+  const right = v.norm(v.cross(fwd, [0, 1, 0]));
+  const up = v.cross(right, fwd);
+  const xs = pts.map((p) => v.dot(p, right)); const ys = pts.map((p) => v.dot(p, up));
+  const hw = (Math.max(...xs) - Math.min(...xs)) / 2 + 10; const hh = (Math.max(...ys) - Math.min(...ys)) / 2 + 12;
+  const center = pts.reduce((acc, p) => v.add(acc, p), [0, 0, 0]).map((q) => q / pts.length);
+  const cyMid = (Math.max(...pts.map((p) => p[1])) + Math.min(...pts.map((p) => p[1]))) / 2;
+  const shape = Math.max(0.85, Math.min(1.3, hh / hw)); // stage height ÷ width
+  const vf = (fovDeg * Math.PI) / 360; const hf = Math.atan(Math.tan(vf) / shape);
+  const dist = Math.max(hh / Math.tan(vf), hw / Math.tan(hf)) * 1.12;
+  return { dist, shape, target: [center[0] * 0.3, cyMid, center[2] * 0.3] };
 }
 
 /** A floor that only shows the shadow, so the athlete sits in a seamless studio backdrop. */

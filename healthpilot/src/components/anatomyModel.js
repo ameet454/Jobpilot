@@ -113,3 +113,35 @@ export function poseAnatomy({ skeleton, meta }, R, breath = 0) {
     skeleton.bones[i].matrixWorld.copy(tmp);
   });
 }
+
+/**
+ * A halo around the working muscles: the same skinned geometry drawn again, pushed out
+ * along the normals, additive and strongest at the silhouette — the muscle looks lit
+ * from inside. Only the target (red) and helper (amber) heads are drawn.
+ */
+export const haloLevel = { value: 0.6 };
+function haloMaterial(color, k) {
+  const m = new THREE.MeshStandardMaterial({ color: '#000000', emissive: color, roughness: 1, metalness: 0, envMapIntensity: 0, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
+  m.onBeforeCompile = (sh) => {
+    sh.uniforms.halo = haloLevel; sh.uniforms.pump = anatomyPump;
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nuniform float pump;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\ntransformed += normal * (1.1 + pump * 0.8);');
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', '#include <common>\nuniform float halo;')
+      .replace('#include <dithering_fragment>', `#include <dithering_fragment>
+        float rim = pow(1.0 - abs(dot(normalize(vNormal), normalize(vViewPosition))), 2.0);
+        gl_FragColor.rgb *= rim * halo * ${k.toFixed(2)};`);
+  };
+  m.customProgramCacheKey = () => `hp-halo-${k}`;
+  return m;
+}
+export function buildHalo(anatomy, roleOfGroup) {
+  const hidden = new THREE.MeshBasicMaterial({ visible: false });
+  const red = haloMaterial('#ff2a14', 1.6); const amber = haloMaterial('#ff9a1f', 0.6);
+  const mats = anatomy.meta.groups.map((g) => { const r = roleOfGroup(g.group); return r === 'primary' ? red : r === 'secondary' ? amber : hidden; });
+  const mesh = new THREE.SkinnedMesh(anatomy.mesh.geometry, mats);
+  mesh.bind(anatomy.skeleton, new THREE.Matrix4());
+  mesh.frustumCulled = false; mesh.renderOrder = 5;
+  return { mesh, dispose: () => { red.dispose(); amber.dispose(); hidden.dispose(); } };
+}

@@ -151,8 +151,8 @@ function bodyMaterial(meta, dark) {
         base = mix(base, eye, vEye);
         float skin = (1.0 - shorts) * (1.0 - vEye) * (1.0 - hair);
         // In anatomy view the muscles underneath carry the colour, not the skin.
-        float hot = vHot * (1.0 - shorts * 0.6) * (1.0 - vEye) * (1.0 - xray);
-        float warm = vWarm * (1.0 - shorts * 0.6) * (1.0 - vEye) * (1.0 - xray);
+        float hot = vHot * (1.0 - shorts * 0.88) * (1.0 - vEye) * (1.0 - xray);
+        float warm = vWarm * (1.0 - shorts * 0.88) * (1.0 - vEye) * (1.0 - xray);
         base = mix(base, cSecondary, warm * 0.38);
         base = mix(base, cPrimary, hot * (0.58 + 0.25 * glow));
         diffuseColor.rgb = base * mix(1.0, vAO, 0.9);

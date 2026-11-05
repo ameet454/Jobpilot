@@ -7,8 +7,8 @@ import { headLabel, headRole, seeThrough } from '../data/exercises.js';
 import { cuesFor } from '../data/coaching.js';
 import ExerciseFigure from './ExerciseFigure.jsx';
 import { BODY_CREDIT, bodyAnchor, buildBody, GLOW, loadBody, poseBody, setHands, setPump, setRoles, setXray } from './bodyModel.js';
-import { ANATOMY_CREDIT, anatomyMaterials, anatomyPump, anatomyRole, buildAnatomy, loadAnatomy, poseAnatomy } from './anatomyModel.js';
-import { addFloor, addStudio, buildProps, defaultView, framing, makeMaterials } from './scene3d.js';
+import { ANATOMY_CREDIT, anatomyMaterials, anatomyPump, anatomyRole, buildAnatomy, buildHalo, haloLevel, loadAnatomy, poseAnatomy } from './anatomyModel.js';
+import { addFloor, addStudio, buildProps, defaultView, fitView, floorGlow, framing, makeMaterials, studioBackdrop } from './scene3d.js';
 import { buildOverlays, OVERLAY_COLOR } from './overlays3d.js';
 import { liftTiming, stressCurve, stressSummary } from '../lib/biomech.js';
 import { JOINT_LABEL } from '../lib/rig3d.js';
@@ -75,22 +75,27 @@ export default function Exercise3D({ ex }) {
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = dark ? 1.05 : 1;
+    renderer.toneMappingExposure = 1.08;
     el.prepend(renderer.domElement);
 
+    // Cinematic dark studio: skin and working muscles read best against it.
     const scene = new THREE.Scene();
-    addStudio(renderer, scene, { shadows: !LOW_END, dark });
-    const mat = makeMaterials(dark);
-    const { ox, cy, size } = framing(ex);
-    if (!ex.noFloor) addFloor(scene, mat);
+    const backdrop = studioBackdrop();
+    scene.background = backdrop;
+    addStudio(renderer, scene, { shadows: !LOW_END, dark: true, cinema: true });
+    const mat = makeMaterials(true);
+    const { ox } = framing(ex);
+    if (!ex.noFloor) { addFloor(scene, mat); floorGlow(scene); }
+    const dv = defaultView(ex);
+    const fit = fitView(ex, ox, dv.az, dv.el, 30);
 
     const camera = new THREE.PerspectiveCamera(30, 1, 1, 5000);
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enablePan = false;
     controls.enableDamping = true;
-    controls.minDistance = size * 1.3;
-    controls.maxDistance = size * 4;
-    controls.target.set(0, cy, 0);
+    controls.minDistance = fit.dist * 0.45;
+    controls.maxDistance = fit.dist * 1.8;
+    controls.target.set(...fit.target);
 
     const group = new THREE.Group(); scene.add(group);
     let body = null;
@@ -108,16 +113,20 @@ export default function Exercise3D({ ex }) {
     // The anatomy under the skin (muscles + skeleton), posed by the same rig.
     const amat = anatomyMaterials(dark);
     let anatomy = null;
+    let halo = null;
     loadAnatomy()
       .then((data) => {
         if (disposed) return;
         anatomy = buildAnatomy(data, (g) => amat[anatomyRole(ex, g, headRole, seeThrough)]);
         anatomy.mesh.visible = false;
         group.add(anatomy.mesh);
+        halo = buildHalo(anatomy, (g) => anatomyRole(ex, g, headRole, seeThrough));
+        halo.mesh.visible = false;
+        group.add(halo.mesh);
       })
       .catch(() => {}); // the skin view still works without it
     const updateProps = buildProps(group, ex, mat, ox);
-    const overlays = buildOverlays(scene, ex, ox, { dark });
+    const overlays = buildOverlays(scene, ex, ox, { dark: true });
     const curveAt = (t) => {
       if (!curve) return 1;
       const sProg = ex.lift === 'BA' ? 1 - t : t;
@@ -126,13 +135,13 @@ export default function Exercise3D({ ex }) {
     };
 
     // Camera: spherical around the target, with an eased move between views.
-    const dist = size * 2.3;
+    const dist = fit.dist;
+    const [tx, ty, tz] = fit.target;
     const placeCam = (az, el2) => {
       const a = (az * Math.PI) / 180; const e = (el2 * Math.PI) / 180;
-      camera.position.set(Math.cos(e) * Math.cos(a) * dist, cy + Math.sin(e) * dist, Math.cos(e) * Math.sin(a) * dist);
+      camera.position.set(tx + Math.cos(e) * Math.cos(a) * dist, ty + Math.sin(e) * dist, tz + Math.cos(e) * Math.sin(a) * dist);
       camera.lookAt(controls.target);
     };
-    const dv = defaultView(ex);
     placeCam(dv.az, dv.el);
     let camAnim = null;
     ctl.current.setView = (name) => {
@@ -144,7 +153,8 @@ export default function Exercise3D({ ex }) {
     };
 
     const resize = () => {
-      const w = el.clientWidth; const h = Math.min(460, Math.max(300, w * 0.95));
+      // The stage takes the athlete's shape: tall for standing moves, wider for lying ones.
+      const w = el.clientWidth; const h = Math.round(Math.min(580, Math.max(300, w * fit.shape)));
       renderer.setSize(w, h); camera.aspect = w / h; camera.updateProjectionMatrix();
     };
     resize();
@@ -206,6 +216,7 @@ export default function Exercise3D({ ex }) {
       if (anatomy) {
         anatomy.mesh.visible = st.xray > 0.02;
         if (anatomy.mesh.visible) poseAnatomy(anatomy, R, st.breath);
+        if (halo) halo.mesh.visible = anatomy.mesh.visible;
       }
       if ((st.xray > 0.5) !== st.xrayUi) { st.xrayUi = st.xray > 0.5; setXrayOn(st.xrayUi); }
       updateProps(R);
@@ -218,6 +229,7 @@ export default function Exercise3D({ ex }) {
       // Anatomy: the target muscle burns brighter where the resistance peaks.
       amat.primary.emissiveIntensity = 0.25 + 1.35 * st.glow * (0.88 + 0.12 * Math.sin(now / 180));
       amat.secondary.emissiveIntensity = 0.06 + 0.3 * st.glow;
+      haloLevel.value = st.xray * (0.25 + 0.95 * st.glow) * (0.9 + 0.1 * Math.sin(now / 140));
 
       if (ph.stage !== st.prev) {
         if (st.prev === 'lift') {
@@ -281,6 +293,8 @@ export default function Exercise3D({ ex }) {
       Object.values(mat).forEach((m) => m.dispose());
       body?.material.dispose();
       Object.values(amat).forEach((m) => m.dispose());
+      halo?.dispose();
+      backdrop.dispose();
       renderer.dispose();
       renderer.domElement.remove();
       ctl.current.setView = null;
