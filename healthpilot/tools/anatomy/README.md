@@ -12,7 +12,14 @@ python -m venv .venv && .venv/bin/pip install numpy==2.3.4 fast-simplification==
 .venv/bin/python bp_extract.py --zip BodyParts3D_3.0_obj_99.zip --parts parts_list_e.txt --out work
 .venv/bin/python bp_build.py --src work --out work --budget 90000
 cp work/anatomy.bin work/anatomy.json ../body/atlas/
+# then, after tools/body/build_body.py has written public/body/body.*:
+.venv/bin/python bp_finish.py --atlas ../body/atlas --body ../../public/body --out ../../public/body
 ```
+
+`bp_finish.py` makes the anatomy the app shows (`public/body/anatomy.*`): it rounds out the
+small working muscles (Loop subdivision), gives every muscle the bone weights of the nearest
+skin of the MakeHuman body (smoothed over the muscle) so muscles bend with the skin instead of
+tearing at the armpit, and stores each muscle's fibre direction and tendon ends for the shader.
 
 Licence of the atlas and of the muscle labels derived from it: CC BY-SA 2.1 JP —
 "BodyParts3D, Copyright© The Database Center for Life Science licensed by CC Attribution-Share Alike 2.1 Japan".

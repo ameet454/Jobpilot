@@ -1,173 +1,173 @@
 {
  "credit": "BodyParts3D, Copyright\u00a9 The Database Center for Life Science licensed by CC Attribution-Share Alike 2.1 Japan",
- "vertexCount": 47690,
- "indexCount": 278898,
+ "vertexCount": 64554,
+ "indexCount": 380508,
  "indexType": "u16",
  "quant": 50.0,
  "groups": [
   {
    "group": "chest.lower",
    "start": 0,
-   "count": 468
+   "count": 7488
   },
   {
    "group": "chest.mid",
-   "start": 468,
-   "count": 1992
+   "start": 7488,
+   "count": 7968
   },
   {
    "group": "chest.upper",
-   "start": 2460,
-   "count": 510
+   "start": 15456,
+   "count": 8160
   },
   {
    "group": "shoulders.front",
-   "start": 2970,
-   "count": 1578
+   "start": 23616,
+   "count": 6312
   },
   {
    "group": "shoulders.rear",
-   "start": 4548,
-   "count": 2442
+   "start": 29928,
+   "count": 9768
   },
   {
    "group": "shoulders.side",
-   "start": 6990,
-   "count": 1614
+   "start": 39696,
+   "count": 6456
   },
   {
    "group": "biceps.biceps",
-   "start": 8604,
-   "count": 3342
+   "start": 46152,
+   "count": 13368
   },
   {
    "group": "biceps.brachialis",
-   "start": 11946,
-   "count": 2538
+   "start": 59520,
+   "count": 10152
   },
   {
    "group": "triceps.long",
-   "start": 14484,
-   "count": 2136
+   "start": 69672,
+   "count": 8544
   },
   {
    "group": "triceps.short",
-   "start": 16620,
+   "start": 78216,
    "count": 4230
   },
   {
    "group": "forearms.brachioradialis",
-   "start": 20850,
+   "start": 82446,
    "count": 4044
   },
   {
    "group": "forearms.extensors",
-   "start": 24894,
+   "start": 86490,
    "count": 14106
   },
   {
    "group": "forearms.flexors",
-   "start": 39000,
+   "start": 100596,
    "count": 16164
   },
   {
    "group": "abs.obliques",
-   "start": 55164,
+   "start": 116760,
    "count": 33114
   },
   {
    "group": "abs.rectus",
-   "start": 88278,
+   "start": 149874,
    "count": 11484
   },
   {
    "group": "lats.lats",
-   "start": 99762,
+   "start": 161358,
    "count": 12564
   },
   {
    "group": "lats.rhomboids",
-   "start": 112326,
-   "count": 3486
+   "start": 173922,
+   "count": 13944
   },
   {
    "group": "lats.rotators",
-   "start": 115812,
-   "count": 2574
+   "start": 187866,
+   "count": 10296
   },
   {
    "group": "lats.teres",
-   "start": 118386,
-   "count": 936
+   "start": 198162,
+   "count": 3744
   },
   {
    "group": "traps.lower",
-   "start": 119322,
+   "start": 201906,
    "count": 3792
   },
   {
    "group": "traps.mid",
-   "start": 123114,
-   "count": 1674
+   "start": 205698,
+   "count": 6696
   },
   {
    "group": "traps.upper",
-   "start": 124788,
+   "start": 212394,
    "count": 4206
   },
   {
    "group": "lowerback",
-   "start": 128994,
+   "start": 216600,
    "count": 21858
   },
   {
    "group": "glutes.max",
-   "start": 150852,
-   "count": 1848
+   "start": 238458,
+   "count": 7392
   },
   {
    "group": "glutes.med",
-   "start": 152700,
-   "count": 2820
+   "start": 245850,
+   "count": 11280
   },
   {
    "group": "quads.inner",
-   "start": 155520,
+   "start": 257130,
    "count": 3600
   },
   {
    "group": "quads.outer",
-   "start": 159120,
+   "start": 260730,
    "count": 5238
   },
   {
    "group": "quads.rf",
-   "start": 164358,
+   "start": 265968,
    "count": 4548
   },
   {
    "group": "hamstrings",
-   "start": 168906,
+   "start": 270516,
    "count": 11838
   },
   {
    "group": "calves.gastroc",
-   "start": 180744,
+   "start": 282354,
    "count": 6264
   },
   {
    "group": "calves.soleus",
-   "start": 187008,
+   "start": 288618,
    "count": 3798
   },
   {
    "group": "muscle",
-   "start": 190806,
+   "start": 292416,
    "count": 57294
   },
   {
    "group": "bone",
-   "start": 248100,
+   "start": 349710,
    "count": 30798
   }
  ],
@@ -965,5 +965,6 @@
   "hipZ": 8.843924692111404,
   "kneeZ": 9.911534530889107,
   "ankleZ": 9.001174219781202
- }
+ },
+ "fibre": true
 }

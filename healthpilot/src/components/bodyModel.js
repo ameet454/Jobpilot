@@ -67,6 +67,27 @@ export const BODY_PALETTE = {
 };
 export const GLOW = { primary: '#ff3b30', secondary: '#ff9f0a' };
 
+/** GLSL helpers shared by the skin and the muscles: gradient noise and bump mapping. */
+export const HP_GLSL = `
+        // Gradient noise on the rest-pose position, so surface detail sticks to the body as it moves.
+        vec3 hp_hash(vec3 p) { p = vec3(dot(p, vec3(127.1, 311.7, 74.7)), dot(p, vec3(269.5, 183.3, 246.1)), dot(p, vec3(113.5, 271.9, 124.6)));
+          return -1.0 + 2.0 * fract(sin(p) * 43758.5453123); }
+        float hp_noise(vec3 p) {
+          vec3 i = floor(p); vec3 f = fract(p); vec3 u = f * f * (3.0 - 2.0 * f);
+          return mix(mix(mix(dot(hp_hash(i), f), dot(hp_hash(i + vec3(1, 0, 0)), f - vec3(1, 0, 0)), u.x),
+                         mix(dot(hp_hash(i + vec3(0, 1, 0)), f - vec3(0, 1, 0)), dot(hp_hash(i + vec3(1, 1, 0)), f - vec3(1, 1, 0)), u.x), u.y),
+                     mix(mix(dot(hp_hash(i + vec3(0, 0, 1)), f - vec3(0, 0, 1)), dot(hp_hash(i + vec3(1, 0, 1)), f - vec3(1, 0, 1)), u.x),
+                         mix(dot(hp_hash(i + vec3(0, 1, 1)), f - vec3(0, 1, 1)), dot(hp_hash(i + vec3(1, 1, 1)), f - vec3(1, 1, 1)), u.x), u.y), u.z); }
+        vec3 hp_bump(vec3 surfPos, vec3 n, float h, float faceDir) {
+          vec3 sx = dFdx(surfPos); vec3 sy = dFdy(surfPos);
+          vec3 r1 = cross(sy, n); vec3 r2 = cross(n, sx);
+          float det = dot(sx, r1) * faceDir;
+          vec3 grad = sign(det) * (dFdx(h) * r1 + dFdy(h) * r2);
+          return normalize(abs(det) * n - grad); }`;
+
+/** In anatomy view the head, hands and feet stay solid, sculpted in the same clay as the muscles. */
+export const CLAY = '#d3ccc5';
+
 /**
  * The skin material. `uniforms.role[i]` is 2 for a target head, 1 for a helper,
  * 0 otherwise; `uniforms.glow` (0..1) is the effort pulse.
@@ -90,7 +111,7 @@ function bodyMaterial(meta, dark) {
     Object.assign(sh.uniforms, uniforms);
     sh.vertexShader = sh.vertexShader
       .replace('#include <common>', `#include <common>
-        attribute vec2 aMus; attribute vec2 aMusW; attribute vec2 aAttr; attribute vec4 aCut; attribute float aBrow; attribute vec3 aTint;
+        attribute vec2 aMus; attribute vec2 aMusW; attribute vec2 aAttr; attribute vec4 aCut; attribute float aBrow; attribute vec3 aTint; attribute float aKeep; varying float vKeep;
         uniform float role[32]; uniform float pump;
         varying float vAO; varying float vHot; varying float vWarm; varying vec4 vCut; varying float vBrow; varying float vEye;
         varying vec3 vRest; varying vec3 vTint;
@@ -106,31 +127,17 @@ function bodyMaterial(meta, dark) {
           vWarm += (r > 0.01 && r < 1.5) ? w * r : 0.0;
         }
         vHot = clamp(vHot, 0.0, 1.0); vWarm = clamp(vWarm, 0.0, 1.0) * (1.0 - vHot);
-        vRest = position; vTint = aTint;
+        vRest = position; vTint = aTint; vKeep = aKeep;
         // The working muscle swells under the skin as it contracts.
         transformed += normal * (pump * (0.85 * vHot + 0.3 * vWarm));`);
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <common>', `#include <common>
         uniform float glow; uniform vec3 cPrimary; uniform vec3 cSecondary; uniform vec3 palette[6];
-        uniform float idMode; uniform float idStep; uniform float xray; flat varying float vId;
+        uniform float idMode; uniform float idStep; uniform float xray; flat varying float vId; varying float vKeep;
         varying float vAO; varying float vHot; varying float vWarm; varying vec4 vCut; varying float vBrow; varying float vEye;
         float edge(float d) { float w = fwidth(d) * 0.75 + 1e-4; return smoothstep(-w, w, d); }
         varying vec3 vRest; varying vec3 vTint;
-        // Gradient noise on the rest-pose position, so skin detail sticks to the body as it moves.
-        vec3 hp_hash(vec3 p) { p = vec3(dot(p, vec3(127.1, 311.7, 74.7)), dot(p, vec3(269.5, 183.3, 246.1)), dot(p, vec3(113.5, 271.9, 124.6)));
-          return -1.0 + 2.0 * fract(sin(p) * 43758.5453123); }
-        float hp_noise(vec3 p) {
-          vec3 i = floor(p); vec3 f = fract(p); vec3 u = f * f * (3.0 - 2.0 * f);
-          return mix(mix(mix(dot(hp_hash(i), f), dot(hp_hash(i + vec3(1, 0, 0)), f - vec3(1, 0, 0)), u.x),
-                         mix(dot(hp_hash(i + vec3(0, 1, 0)), f - vec3(0, 1, 0)), dot(hp_hash(i + vec3(1, 1, 0)), f - vec3(1, 1, 0)), u.x), u.y),
-                     mix(mix(dot(hp_hash(i + vec3(0, 0, 1)), f - vec3(0, 0, 1)), dot(hp_hash(i + vec3(1, 0, 1)), f - vec3(1, 0, 1)), u.x),
-                         mix(dot(hp_hash(i + vec3(0, 1, 1)), f - vec3(0, 1, 1)), dot(hp_hash(i + vec3(1, 1, 1)), f - vec3(1, 1, 1)), u.x), u.y), u.z); }
-        vec3 hp_bump(vec3 surfPos, vec3 n, float h, float faceDir) {
-          vec3 sx = dFdx(surfPos); vec3 sy = dFdy(surfPos);
-          vec3 r1 = cross(sy, n); vec3 r2 = cross(n, sx);
-          float det = dot(sx, r1) * faceDir;
-          vec3 grad = sign(det) * (dFdx(h) * r1 + dFdy(h) * r2);
-          return normalize(abs(det) * n - grad); }`)
+        ${HP_GLSL}`)
       .replace('#include <color_fragment>', `#include <color_fragment>
         float shorts = edge(vCut.x) * edge(vCut.y) * (1.0 - vEye);
         float band = shorts * (1.0 - edge(vCut.y - 2.4));
@@ -153,8 +160,9 @@ function bodyMaterial(meta, dark) {
         // In anatomy view the muscles underneath carry the colour, not the skin.
         float hot = vHot * (1.0 - shorts * 0.88) * (1.0 - vEye) * (1.0 - xray);
         float warm = vWarm * (1.0 - shorts * 0.88) * (1.0 - vEye) * (1.0 - xray);
-        base = mix(base, cSecondary, warm * 0.38);
-        base = mix(base, cPrimary, hot * (0.58 + 0.25 * glow));
+        // On the skin the working muscle only flushes; the anatomy view carries the strong colour.
+        base = mix(base, cSecondary, warm * 0.16);
+        base = mix(base, cPrimary, hot * (0.2 + 0.14 * glow));
         diffuseColor.rgb = base * mix(1.0, vAO, 0.9);
         float vCloth = shorts;
         float vHotOut = hot; float vWarmOut = warm;`)
@@ -186,12 +194,14 @@ function bodyMaterial(meta, dark) {
           float fres = pow(1.0 - abs(dot(normalize(vNormal), normalize(vViewPosition))), 2.2);
           gl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(0.80, 0.90, 1.0), xray * (0.08 + 0.55 * fres));
           gl_FragColor.a *= mix(1.0, 0.015 + 0.55 * fres * fres, xray);
+          // Head, hands and feet: drawn by the clay cap instead.
+          if (vKeep > 0.5) discard;
         }
         if (idMode > 0.5) gl_FragColor = vec4(vId * idStep / 255.0, 0.0, 0.0, 1.0);`)
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
-        totalEmissiveRadiance += cPrimary * vHotOut * (0.08 + 0.30 * glow) + cSecondary * vWarmOut * 0.05;`);
+        totalEmissiveRadiance += cPrimary * vHotOut * (0.03 + 0.12 * glow) + cSecondary * vWarmOut * 0.02;`);
   };
-  mat.customProgramCacheKey = () => 'hp-body-v6';
+  mat.customProgramCacheKey = () => 'hp-body-v7';
   mat.transparent = true; // alpha stays 1 until the X-ray fades the skin
   return { mat, uniforms };
 }
@@ -219,6 +229,11 @@ export function buildBody([meta, buf], { dark = false } = {}) {
   geo.setAttribute('aCut', new THREE.BufferAttribute(cut, 4));
   geo.setAttribute('aBrow', new THREE.BufferAttribute(brow, 1));
   geo.setAttribute('aTint', new THREE.BufferAttribute(tint, 3));
+  // How much each vertex rides the head, hand or foot bones (kept solid in anatomy view).
+  const keepBone = meta.bones.map((b) => /^(head|hand|foot)/.test(b));
+  const keep = new Float32Array(n);
+  for (let i = 0; i < n; i += 1) for (let k = 0; k < 4; k += 1) if (keepBone[d.skinIndex[i * 4 + k]]) keep[i] += d.skinWeight[i * 4 + k] / 255;
+  geo.setAttribute('aKeep', new THREE.BufferAttribute(keep, 1));
   geo.setIndex(new THREE.BufferAttribute(d.index, 1));
   geo.computeVertexNormals();
   // Morph 0: palms flat (push-ups). Normals for the morph come from the morphed shape.
@@ -265,11 +280,45 @@ export function setRoles(body, roleOf) {
   });
 }
 
+/**
+ * The clay cap: head, hands and feet drawn solid while the rest of the skin is glass, so
+ * the anatomy view shows a sculpted figure instead of a bare skull and finger bones.
+ * Shares the body's geometry, skeleton and hand morph.
+ */
+export function buildClayCap(body) {
+  const xr = body.uniforms.xray;
+  const mat = new THREE.MeshPhysicalMaterial({ color: '#ffffff', roughness: 0.62, sheen: 0.4, sheenRoughness: 0.5, sheenColor: new THREE.Color('#ffffff') });
+  const skin = new THREE.Color(BODY_PALETTE.dark.skin); const clay = new THREE.Color(CLAY);
+  mat.onBeforeCompile = (sh) => {
+    sh.uniforms.xray = xr; sh.uniforms.cSkin = { value: skin }; sh.uniforms.cClay = { value: clay };
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nattribute float aKeep; varying float vKeep; varying vec3 vRest;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvKeep = aKeep; vRest = position;');
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', `#include <common>
+        uniform float xray; uniform vec3 cSkin; uniform vec3 cClay; varying float vKeep; varying vec3 vRest;
+        ${HP_GLSL}`)
+      .replace('#include <color_fragment>', `#include <color_fragment>
+        if (vKeep <= 0.5) discard;
+        diffuseColor.rgb = mix(cSkin, cClay, smoothstep(0.0, 0.7, xray)) * (1.0 + 0.04 * hp_noise(vRest * 0.6));`)
+      .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
+        normal = hp_bump(-vViewPosition, normal, hp_noise(vRest * 3.0) * 0.012, faceDirection);`);
+  };
+  mat.customProgramCacheKey = () => 'hp-claycap-v1';
+  const mesh = new THREE.SkinnedMesh(body.mesh.geometry, mat);
+  mesh.bind(body.skeleton, new THREE.Matrix4());
+  mesh.morphTargetInfluences = body.mesh.morphTargetInfluences;
+  mesh.frustumCulled = false; mesh.castShadow = true; mesh.visible = false;
+  body.cap = mesh;
+  return { mesh, dispose: () => mat.dispose() };
+}
+
 /** 0 = solid skin, 1 = glass skin that shows the anatomy inside. */
 export function setXray(body, k) {
   body.uniforms.xray.value = k;
   body.material.depthWrite = k < 0.35;
   body.mesh.castShadow = k < 0.5;
+  if (body.cap) body.cap.visible = k > 0.001;
 }
 
 /** 0..1: how hard the target muscle is contracting (makes it swell slightly). */

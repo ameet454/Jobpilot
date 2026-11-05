@@ -11,7 +11,7 @@
  * CC Attribution-Share Alike 2.1 Japan.
  */
 import * as THREE from 'three';
-import { boneFrames } from './bodyModel.js';
+import { boneFrames, CLAY, HP_GLSL } from './bodyModel.js';
 
 export const ANATOMY_CREDIT = 'Muscles and skeleton: BodyParts3D © The Database Center for Life Science, CC BY-SA 2.1 JP';
 
@@ -27,33 +27,63 @@ export function loadAnatomy() {
   return cache;
 }
 
-/**
- * Materials: resting muscle in a natural red-brown, bone in ivory, the target
- * muscle in hot red and helpers in amber; their glow is driven per frame.
- */
 /** Shared contraction amount (0..1) for the working muscles in the anatomy. */
 export const anatomyPump = { value: 0 };
-function swells(mat, k) {
+
+/**
+ * Muscle shading, as in anatomy atlases: fine fibre striations running along each
+ * muscle's long axis (colour and relief), glossy white tendon at the ends of long
+ * muscles, and a swell along the normals as the working muscles contract.
+ */
+function muscleShader(mat, { swell = 0, fibre = 1, tendon = 1, key }) {
   mat.onBeforeCompile = (sh) => {
     sh.uniforms.pump = anatomyPump;
     sh.vertexShader = sh.vertexShader
-      .replace('#include <common>', '#include <common>\nuniform float pump;')
-      .replace('#include <begin_vertex>', `#include <begin_vertex>\ntransformed += normal * pump * ${k.toFixed(2)};`);
+      .replace('#include <common>', `#include <common>
+        uniform float pump; attribute vec4 aFibre; varying vec4 vFib; varying vec3 vRestA;`)
+      .replace('#include <begin_vertex>', `#include <begin_vertex>
+        vFib = aFibre; vRestA = position;
+        transformed += normal * pump * ${swell.toFixed(2)} * (1.0 - aFibre.w);`);
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', `#include <common>
+        varying vec4 vFib; varying vec3 vRestA;
+        ${HP_GLSL}
+        float hp_fibre() {
+          vec3 d = vFib.xyz; float l = length(d);
+          if (l < 0.2) return hp_noise(vRestA * 1.4) * 0.5;
+          d /= l;
+          float along = dot(vRestA, d); vec3 across = vRestA - d * along;
+          return hp_noise(across * 2.6 + d * along * 0.16) * 0.6 + hp_noise(across * 7.0 + d * along * 0.4 + 11.0) * 0.4;
+        }`)
+      .replace('#include <color_fragment>', `#include <color_fragment>
+        float fib = hp_fibre();
+        float ten = smoothstep(0.05, 0.85, vFib.w) * ${tendon.toFixed(2)};
+        diffuseColor.rgb *= 1.0 + ${(0.22 * fibre).toFixed(3)} * fib;
+        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.93, 0.9, 0.85), ten);`)
+      .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
+        roughnessFactor = mix(roughnessFactor, 0.3, ten);`)
+      .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
+        normal = hp_bump(-vViewPosition, normal, fib * ${(0.06 * fibre).toFixed(3)} * (1.0 - ten), faceDirection);`)
+      .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+        totalEmissiveRadiance *= 1.0 - ten * 0.8;`);
   };
-  mat.customProgramCacheKey = () => `hp-swell-${k}`;
+  mat.customProgramCacheKey = () => `hp-muscle-${key}`;
   return mat;
 }
 
-export function anatomyMaterials(dark) {
+/**
+ * Atlas-style colours on the dark stage: the figure in pale clay (muscles with their
+ * fibres, ivory bone), the target muscle in vivid red, helpers in amber.
+ */
+export function anatomyMaterials() {
   return {
-    // Resting muscle pale, so only the working muscles carry strong colour.
-    muscle: new THREE.MeshPhysicalMaterial({ color: dark ? '#b48478' : '#d6a597', roughness: 0.5, sheen: 0.5, sheenColor: new THREE.Color('#fff0ea'), sheenRoughness: 0.6 }),
-    bone: new THREE.MeshStandardMaterial({ color: '#f2ebdd', roughness: 0.6 }),
-    primary: swells(new THREE.MeshPhysicalMaterial({ color: '#ff2414', emissive: '#ff1200', emissiveIntensity: 0.7, roughness: 0.35, sheen: 0.4, sheenColor: new THREE.Color('#ffd6cf') }), 0.8),
-    secondary: swells(new THREE.MeshPhysicalMaterial({ color: '#ffad42', emissive: '#ff8400', emissiveIntensity: 0.15, roughness: 0.45 }), 0.3),
-    // Core muscles that only brace get a faint tint.
-    stabiliser: new THREE.MeshPhysicalMaterial({ color: '#efc39a', roughness: 0.5 }),
-    veil: new THREE.MeshStandardMaterial({ color: '#e6c2b6', roughness: 0.5, transparent: true, opacity: 0.16, depthWrite: false }),
+    muscle: muscleShader(new THREE.MeshPhysicalMaterial({ color: CLAY, roughness: 0.55, sheen: 0.35, sheenRoughness: 0.5, sheenColor: new THREE.Color('#ffffff') }), { key: 'rest', fibre: 0.8 }),
+    bone: new THREE.MeshPhysicalMaterial({ color: '#efe4cf', roughness: 0.45, clearcoat: 0.25, clearcoatRoughness: 0.5 }),
+    primary: muscleShader(new THREE.MeshPhysicalMaterial({ color: '#b8160f', emissive: '#e8140a', emissiveIntensity: 0.5, roughness: 0.38, sheen: 0.5, sheenRoughness: 0.4, sheenColor: new THREE.Color('#ffb4a6'), clearcoat: 0.3, clearcoatRoughness: 0.45 }), { key: 'primary', swell: 0.8, fibre: 1.2 }),
+    secondary: muscleShader(new THREE.MeshPhysicalMaterial({ color: '#e8862c', emissive: '#ff7a00', emissiveIntensity: 0.15, roughness: 0.45, sheen: 0.4, sheenColor: new THREE.Color('#ffe0b0') }), { key: 'secondary', swell: 0.3 }),
+    // Core muscles that only brace get a faint warm tint.
+    stabiliser: muscleShader(new THREE.MeshPhysicalMaterial({ color: '#e3c3a3', roughness: 0.5 }), { key: 'stab', fibre: 0.8 }),
+    veil: new THREE.MeshStandardMaterial({ color: CLAY, roughness: 0.5, transparent: true, opacity: 0.14, depthWrite: false }),
   };
 }
 
@@ -77,6 +107,9 @@ export function buildAnatomy([meta, buf], materialFor) {
   const pos16 = new Int16Array(buf, off, n * 3); off += n * 6;
   const skinIndex = new Uint8Array(buf, off, n * 4); off += n * 4;
   const skinWeight = new Uint8Array(buf, off, n * 4); off += n * 4;
+  // Fibre direction (int8 ×3) and tendon amount (uint8) per vertex, from bp_finish.py.
+  const fibre = meta.fibre ? new Int8Array(buf, off, n * 4) : null;
+  if (fibre) off += n * 4;
   off += (4 - (off % 4)) % 4;
   const index = meta.indexType === 'u16' ? new Uint16Array(buf, off, meta.indexCount) : new Uint32Array(buf, off, meta.indexCount);
   const pos = new Float32Array(n * 3);
@@ -85,6 +118,14 @@ export function buildAnatomy([meta, buf], materialFor) {
   geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
   geo.setAttribute('skinIndex', new THREE.Uint8BufferAttribute(skinIndex, 4));
   geo.setAttribute('skinWeight', new THREE.BufferAttribute(skinWeight, 4, true));
+  if (fibre) {
+    const fb = new Float32Array(n * 4);
+    for (let i = 0; i < n; i += 1) {
+      fb[i * 4] = fibre[i * 4] / 127; fb[i * 4 + 1] = fibre[i * 4 + 1] / 127; fb[i * 4 + 2] = fibre[i * 4 + 2] / 127;
+      fb[i * 4 + 3] = (fibre[i * 4 + 3] & 255) / 255;
+    }
+    geo.setAttribute('aFibre', new THREE.BufferAttribute(fb, 4));
+  }
   geo.setIndex(new THREE.BufferAttribute(index, 1));
   geo.computeVertexNormals();
   const materials = [];

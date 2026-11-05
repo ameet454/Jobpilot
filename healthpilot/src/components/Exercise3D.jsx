@@ -6,7 +6,7 @@ import { repPhase, STAGE_LOAD } from '../lib/pose.js';
 import { headLabel, headRole, seeThrough } from '../data/exercises.js';
 import { cuesFor } from '../data/coaching.js';
 import ExerciseFigure from './ExerciseFigure.jsx';
-import { BODY_CREDIT, bodyAnchor, buildBody, GLOW, loadBody, poseBody, setHands, setPump, setRoles, setXray } from './bodyModel.js';
+import { BODY_CREDIT, bodyAnchor, buildBody, buildClayCap, GLOW, loadBody, poseBody, setHands, setPump, setRoles, setXray } from './bodyModel.js';
 import { ANATOMY_CREDIT, anatomyMaterials, anatomyPump, anatomyRole, buildAnatomy, buildHalo, haloLevel, loadAnatomy, poseAnatomy } from './anatomyModel.js';
 import { addFloor, addStudio, buildProps, defaultView, fitView, floorGlow, framing, makeMaterials, studioBackdrop } from './scene3d.js';
 import { buildOverlays, OVERLAY_COLOR } from './overlays3d.js';
@@ -32,14 +32,15 @@ export default function Exercise3D({ ex }) {
   const mount = useRef(null);
   const label = useRef(null);
   const leverTag = useRef(null);
-  const ctl = useRef({ playing: true, speed: 1, voice: false, setView: null, path: true, forces: true });
+  const ctl = useRef({ playing: true, speed: 1, voice: false, setView: null, path: true, forces: false });
   const [ui, setUi] = useState({ stage: null, left: 0, progress: 0, rep: 0, cue: '', done: false });
   const [playing, setPlaying] = useState(true);
   const [speed, setSpeed] = useState(1);
   const [voice, setVoice] = useState(false);
   const [view, setView] = useState('auto');
   const [showPath, setShowPath] = useState(true);
-  const [showForces, setShowForces] = useState(true);
+  // Line of force and lever arm: for the curious, off by default to keep the view clean.
+  const [showForces, setShowForces] = useState(false);
   // 'auto': starts as skin, turns to anatomy once the rep gets going.
   const [layer, setLayer] = useState('auto');
   const [xrayOn, setXrayOn] = useState(false);
@@ -99,6 +100,7 @@ export default function Exercise3D({ ex }) {
 
     const group = new THREE.Group(); scene.add(group);
     let body = null;
+    let cap = null;
     let disposed = false;
     loadBody()
       .then((data) => {
@@ -107,11 +109,13 @@ export default function Exercise3D({ ex }) {
         setRoles(body, (h) => headRole(ex, h));
         setHands(body, ex.hands);
         group.add(body.mesh);
+        cap = buildClayCap(body);
+        group.add(cap.mesh);
         setLoading(false);
       })
       .catch(() => { if (!disposed) setFailed(true); });
     // The anatomy under the skin (muscles + skeleton), posed by the same rig.
-    const amat = anatomyMaterials(dark);
+    const amat = anatomyMaterials();
     let anatomy = null;
     let halo = null;
     loadAnatomy()
@@ -227,7 +231,7 @@ export default function Exercise3D({ ex }) {
       st.glow += (load - st.glow) * Math.min(1, dt / 180);
       if (body) body.uniforms.glow.value = st.glow * (0.85 + 0.15 * Math.sin(now / 260));
       // Anatomy: the target muscle burns brighter where the resistance peaks.
-      amat.primary.emissiveIntensity = 0.25 + 1.35 * st.glow * (0.88 + 0.12 * Math.sin(now / 180));
+      amat.primary.emissiveIntensity = 0.12 + 0.7 * st.glow * (0.88 + 0.12 * Math.sin(now / 180));
       amat.secondary.emissiveIntensity = 0.06 + 0.3 * st.glow;
       haloLevel.value = st.xray * (0.25 + 0.95 * st.glow) * (0.9 + 0.1 * Math.sin(now / 140));
 
@@ -292,6 +296,7 @@ export default function Exercise3D({ ex }) {
       scene.traverse((o) => { if (o.geometry) o.geometry.dispose(); });
       Object.values(mat).forEach((m) => m.dispose());
       body?.material.dispose();
+      cap?.dispose();
       Object.values(amat).forEach((m) => m.dispose());
       halo?.dispose();
       backdrop.dispose();

@@ -10,7 +10,9 @@
 import * as THREE from 'three';
 import { EXERCISES, headRole } from '/src/data/exercises.js';
 import { rig } from '/src/lib/rig3d.js';
-import { buildBody, loadBody, poseBody, setHands, setRoles } from '/src/components/bodyModel.js';
+import { buildBody, buildClayCap, loadBody, poseBody, setHands, setRoles, setXray } from '/src/components/bodyModel.js';
+import { anatomyMaterials, anatomyRole, buildAnatomy, buildHalo, haloLevel, loadAnatomy, poseAnatomy } from '/src/components/anatomyModel.js';
+import { seeThrough } from '/src/data/exercises.js';
 import { addFloor, addStudio, buildProps, defaultView, framing, makeMaterials } from '/src/components/scene3d.js';
 import { buildOverlays } from '/src/components/overlays3d.js';
 
@@ -40,7 +42,8 @@ function cropToContent(src, w, h) {
   return out.toDataURL('image/webp', 0.9);
 }
 
-/* ── Exercise thumbnails: key pose, target red, helpers amber, soft shadow ── */
+/* ── Exercise thumbnails: the anatomy figure at the key pose, target red, helpers amber ── */
+const adata = await loadAnatomy();
 const THUMB_T = { deadlift: 0.15, 'barbell-row': 1, plank: 0.5, 'mountain-climber': 0 };
 if (only !== 'map') {
   renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -48,19 +51,21 @@ if (only !== 'map') {
   renderer.setPixelRatio(1);
   renderer.setSize(720, 540);
   for (const ex of EXERCISES) {
-    const scene = new THREE.Scene(); addStudio(renderer, scene);
-    const mat = makeMaterials(false);
+    const scene = new THREE.Scene(); addStudio(renderer, scene, { shadows: true, dark: true, cinema: true });
+    const mat = makeMaterials(true);
     const { ox, cy, size } = framing(ex);
-    if (!ex.noFloor) addFloor(scene, mat);
     const body = buildBody(data); setRoles(body, (h) => headRole(ex, h)); setHands(body, ex.hands);
-    body.uniforms.glow.value = 0.9;
-    scene.add(body.mesh);
+    scene.add(body.mesh); scene.add(buildClayCap(body).mesh); setXray(body, 1);
+    const roleOf = (g) => anatomyRole(ex, g, headRole, seeThrough);
+    const am = anatomyMaterials(); am.primary.emissiveIntensity = 0.55;
+    const an = buildAnatomy(adata, (g) => am[roleOf(g)]); scene.add(an.mesh);
+    const halo = buildHalo(an, roleOf); haloLevel.value = 0.8; scene.add(halo.mesh);
     const group = new THREE.Group(); scene.add(group);
     const update = buildProps(group, ex, mat, ox);
     const R = rig(ex, THUMB_T[ex.id] ?? 1, ox);
-    poseBody(body, R); update(R);
+    poseBody(body, R); poseAnatomy(an, R); update(R);
     // The bar path, so the list shows how each exercise moves.
-    const ov = buildOverlays(scene, ex, ox, { markers: false });
+    const ov = buildOverlays(scene, ex, ox, { markers: false, dark: true });
     ov.setVisible({ path: true, forces: false }); ov.update(THUMB_T[ex.id] ?? 1, 'lift', 1);
     const cam = new THREE.PerspectiveCamera(30, 720 / 540, 1, 5000);
     const { az, el } = defaultView(ex); const d = size * 2.4;

@@ -71,7 +71,7 @@
 .ex-list li + li { border-top: 1px solid var(--border); }
 .ex-list button, .ex-card-head { display: flex; align-items: center; gap: 12px; width: 100%; background: none; border: 0; padding: 10px 0; text-align: left; }
 .ex-list .grow, .ex-card-head .grow { display: flex; flex-direction: column; }
-.thumb { width: 84px; height: 63px; flex: none; border-radius: 12px; background: linear-gradient(180deg, var(--stage-hi), var(--stage-lo)); overflow: hidden; box-shadow: inset 0 0 0 1px var(--border); }
+.thumb { width: 84px; height: 63px; flex: none; border-radius: 12px; background: radial-gradient(120% 90% at 50% 30%, #2a3240, #10141b 75%); overflow: hidden; box-shadow: inset 0 0 0 1px var(--border); }
 .thumb svg, .thumb img { width: 100%; height: 100%; object-fit: contain; display: block; }
 .day { padding: 0; overflow: hidden; }
 .day.next { border-color: color-mix(in srgb, var(--accent) 50%, var(--border)); }

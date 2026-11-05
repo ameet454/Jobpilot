@@ -298,6 +298,18 @@ export function defaultView(ex) {
   const lying = Math.abs(Math.sin((ex.A.torso * Math.PI) / 180)) < 0.6;
   const f0 = ex.focus[0];
   const back = BACK_MUSCLES.has(f0.split('.')[0]) || f0 === 'shoulders.rear';
-  if (lying) return { az: back ? 115 : 65, el: 34 };
-  return { az: ex.view === 'front' ? 14 : back ? 130 : 58, el: 8 };
+  if (lying) {
+    // Lying face up, the front of the body faces the sky; face down, the back does.
+    const chest = rig(ex, 0, 0).bones.find((b) => b.key === 'chest');
+    const supine = chest.f[1] > 0;
+    if (supine === back) return { az: back ? 100 : 62, el: 6 }; // target underneath: look from low down
+    // Pressing on a bench: from above the head end, over the plates, onto the chest.
+    if (f0.startsWith('chest')) return { az: 125, el: 38 };
+    return { az: back ? 115 : 65, el: 34 };
+  }
+  if (ex.view === 'front') return { az: back ? 160 : 14, el: 8 };
+  // Three-quarter views: far enough round to see the target muscle face-on, close enough
+  // to the side to read the movement.
+  const AZ = { biceps: 40, chest: 48, quads: 50, abs: 50, shoulders: 45, rear: 135, calves: 130, lats: 138, traps: 145, triceps: 125, glutes: 128, hamstrings: 128, lowerback: 122 };
+  return { az: AZ[f0 === 'shoulders.rear' ? 'rear' : f0.split('.')[0]] ?? (back ? 130 : 58), el: 8 };
 }

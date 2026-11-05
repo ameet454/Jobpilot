@@ -7,10 +7,10 @@
 import * as THREE from 'three';
 import { EXERCISE_BY_ID, EXERCISES, headRole } from '/src/data/exercises.js';
 import { rig } from '/src/lib/rig3d.js';
-import { buildBody, loadBody, poseBody, setHands, setRoles, setXray } from '/src/components/bodyModel.js';
-import { anatomyMaterials, anatomyRole, buildAnatomy, loadAnatomy, poseAnatomy } from '/src/components/anatomyModel.js';
+import { buildBody, buildClayCap, loadBody, poseBody, setHands, setRoles, setXray } from '/src/components/bodyModel.js';
+import { anatomyMaterials, anatomyRole, buildAnatomy, buildHalo, haloLevel, loadAnatomy, poseAnatomy } from '/src/components/anatomyModel.js';
 import { headRole as role2, seeThrough } from '/src/data/exercises.js';
-import { addFloor, addStudio, buildProps, defaultView, framing, makeMaterials } from '/src/components/scene3d.js';
+import { addFloor, addStudio, buildProps, defaultView, framing, makeMaterials, studioBackdrop } from '/src/components/scene3d.js';
 
 const q = new URLSearchParams(location.search);
 const ids = q.get('ex') === 'all' ? EXERCISES.map((e) => e.id) : (q.get('ex') || 'bench-press').split(',');
@@ -24,11 +24,14 @@ renderer.setPixelRatio(1); renderer.setSize(W, H);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = +(q.get('exp') || 1);
 renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-for (const id of ids) for (const t of ts) {
+const VIEWS = (q.get('views') || '').split(',').filter(Boolean).map((x) => x.split(':').map(Number));
+for (const id of ids) for (const t of ts) for (const vw of (VIEWS.length ? VIEWS : [null])) {
   const ex = id === 'rest' ? null : EXERCISE_BY_ID[id];
   const scene = new THREE.Scene(); scene.background = new THREE.Color(q.get('bg') || '#eef0f3');
-  addStudio(renderer, scene);
-  const mat = makeMaterials(false);
+  const CINE = q.get('cine');
+  if (CINE) scene.background = studioBackdrop();
+  addStudio(renderer, scene, CINE ? { shadows: true, dark: true, cinema: true } : undefined);
+  const mat = makeMaterials(!!CINE);
   const body = buildBody(data);
   scene.add(body.mesh);
   let cy = 0, size = 240, az = +(q.get('az') ?? 30), el = +(q.get('el') ?? 8);
@@ -42,13 +45,16 @@ for (const id of ids) for (const t of ts) {
     const up = buildProps(g, ex, mat, f.ox);
     const R = rig(ex, t, f.ox); poseBody(body, R); up(R);
     if (XR) {
+      scene.add(buildClayCap(body).mesh);
       setXray(body, XR);
-      const am = anatomyMaterials(false);
+      const am = anatomyMaterials();
       am.primary.emissiveIntensity = 1.2; am.secondary.emissiveIntensity = 0.25;
       const an = buildAnatomy(adata, (g) => am[anatomyRole(ex, g, role2, seeThrough)]);
       scene.add(an.mesh); poseAnatomy(an, R);
+      if (q.get('halo')) { const h = buildHalo(an, (g) => anatomyRole(ex, g, role2, seeThrough)); haloLevel.value = 0.9; scene.add(h.mesh); }
     }
     if (!q.get('az')) ({ az, el } = defaultView(ex));
+    if (vw) [az, el] = vw;
   } else {
     body.skeleton.bones.forEach((b, i) => b.matrixWorld.copy(body.skeleton.boneInverses[i]).invert());
     cy = -10;
@@ -62,7 +68,7 @@ for (const id of ids) for (const t of ts) {
   renderer.render(scene, cam);
   const fig = document.createElement('figure'); fig.style.margin = 0; fig.style.font = '11px system-ui';
   const img = new Image(); img.src = renderer.domElement.toDataURL(); fig.append(img);
-  const cap = document.createElement('figcaption'); cap.textContent = `${id} t=${t}`; fig.append(cap);
+  const cap = document.createElement('figcaption'); cap.textContent = `${id} t=${t}${vw ? ` az=${az} el=${el}` : ''}`; fig.append(cap);
   document.getElementById('out').append(fig);
 }
 document.body.dataset.done = '1';
